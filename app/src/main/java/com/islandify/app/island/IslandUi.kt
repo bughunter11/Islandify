@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 private val Green = Color(0xFF30D158)
@@ -108,6 +109,7 @@ private fun IslandMode.Toggle.tint(): Color = when (kind) {
 
 private fun IslandMode.Live.icon(): ImageVector {
     if (kind == LiveKind.Navigation) return Icons.Rounded.Navigation
+    if (kind == LiveKind.Download) return Icons.Rounded.Download
     val a = app.lowercase()
     val ride = listOf("uber", "ola", "rapido", "taxi", "cab").any { a.contains(it) }
     return if (ride) Icons.Rounded.LocalTaxi else Icons.Rounded.DeliveryDining
@@ -180,11 +182,14 @@ fun DynamicIslandUi(
     queued: Int = 0,                       // banners waiting behind the current one
 ) {
     val base = LocalDensity.current
+    // Text size of this kind (banners scale their own text, cards / pills scale the font here)
+    val kindStyles by IslandSettings.kindStyles.collectAsState()
+    val textMul = if (level == IslandLevel.Banner) 1f else (kindOf(mode)?.let { kindStyles[it.key]?.text } ?: 1f)
     val actions = IslandActions(
         onPrev, onPlayPause, onNext, onSeek, onAnswer, onDecline,
         onMarkRead, onReply, onSendReply, onCancelReply, replying, onOpenMedia, queued
     )
-    CompositionLocalProvider(LocalDensity provides Density(base.density * scale, base.fontScale)) {
+    CompositionLocalProvider(LocalDensity provides Density(base.density * scale, base.fontScale * textMul)) {
         IslandBody(
             mode, level, widthScale, heightScale, cornerFactor, animSpeed, glow, haptics,
             onClick, onLongPress, onDismiss, actions,
@@ -213,6 +218,11 @@ private fun IslandBody(
     queued: Int,
 ) {
     val lvl = level
+    val kindStyles by IslandSettings.kindStyles.collectAsState()
+    // Each banner type (message, charging, unplugged, ...) has its own size
+    val kind = kindOf(mode)
+    val bs = kind?.let { kindStyles[it.key] } ?: KindStyle()
+    val isPopup = kind?.popup == true
     // Music is only the second part while a timer / navigation is the main thing
     val sec = if (mode is IslandMode.Live || mode is IslandMode.Timer) secondary else null
     val haptic = LocalHapticFeedback.current
@@ -261,11 +271,19 @@ private fun IslandBody(
     // Never wider than the screen (density is already scaled, so derive dp from it)
     val screenPx = LocalContext.current.resources.displayMetrics.widthPixels
     val maxW = (screenPx / LocalDensity.current.density).dp - 8.dp
-    val targetW = (baseW * widthScale).coerceAtMost(maxW)
+    val targetW = (baseW * (when (lvl) {
+        IslandLevel.Banner -> bs.w
+        IslandLevel.Compact -> widthScale * (if (isPopup) 1f else bs.w)
+        else -> widthScale * bs.cardW
+    })).coerceAtMost(maxW)
     // The small pill keeps a sane height; the height slider mainly shapes the cards
     // The mini player adds a row under the card
     val miniExtra = if (sec != null && (lvl == IslandLevel.Expanded || lvl == IslandLevel.Large)) 52.dp else 0.dp
-    val targetH = (baseH + miniExtra) * (if (lvl == IslandLevel.Compact || lvl == IslandLevel.Banner) heightScale.coerceIn(0.8f, 1.2f) else heightScale)
+    val targetH = (baseH + miniExtra) * (when (lvl) {
+        IslandLevel.Compact -> heightScale.coerceIn(0.8f, 1.2f) * (if (isPopup) 1f else bs.h)
+        IslandLevel.Banner -> bs.h   // own height for each banner type
+        else -> heightScale * bs.cardH
+    })
 
     // Higher animSpeed = faster spring
     val spec = spring<Dp>(
@@ -274,7 +292,8 @@ private fun IslandBody(
     )
     val width by animateDpAsState(targetW, spec, label = "w")
     val height by animateDpAsState(targetH, spec, label = "h")
-    val corner = (height / 2 * cornerFactor).coerceIn(12.dp, 46.dp)
+    val cf = if (bs.corner >= 0f) bs.corner else cornerFactor
+    val corner = (height / 2 * cf).coerceIn(12.dp, 46.dp)
     val shape = RoundedCornerShape(corner)
 
     // Glow: accent color from the album art / current mode
@@ -421,6 +440,25 @@ private fun IslandMode.Media.currentPosition(): Long {
 
 /* ------------------------------ COMPACT ------------------------------ */
 
+/** Download ring: filled ring when the progress is known, spinner otherwise. */
+@Composable
+private fun DownloadRing(progress: Int, size: Dp) {
+    if (progress >= 0) {
+        CircularProgressIndicator(
+            progress = { progress / 100f },
+            modifier = Modifier.size(size),
+            color = LiveBlue, trackColor = LiveBlue.copy(alpha = 0.18f),
+            strokeWidth = 2.dp, strokeCap = StrokeCap.Round
+        )
+    } else {
+        CircularProgressIndicator(
+            modifier = Modifier.size(size),
+            color = LiveBlue, trackColor = LiveBlue.copy(alpha = 0.18f),
+            strokeWidth = 2.dp, strokeCap = StrokeCap.Round
+        )
+    }
+}
+
 @Composable
 private fun Compact(m: IslandMode, queued: Int, sec: IslandMode.Media?) {
     val primary = MaterialTheme.colorScheme.primary
@@ -498,7 +536,13 @@ private fun Compact(m: IslandMode, queued: Int, sec: IslandMode.Media?) {
                     Modifier.weight(1f).padding(horizontal = 9.dp),
                     size = 13
                 )
-                if (sec != null) MiniMusic(sec, primary)
+                if (m.kind == LiveKind.Download) {
+                    DownloadRing(m.progress, 18.dp)
+                    if (sec != null) {
+                        Spacer(Modifier.width(6.dp))
+                        MiniMusic(sec, primary)
+                    }
+                } else if (sec != null) MiniMusic(sec, primary)
                 else Box(Modifier.size(7.dp).clip(CircleShape).background(LiveBlue))
             }
         }
@@ -523,6 +567,7 @@ private fun BannerRow(
     title: String,
     subtitle: String,
     trail: (@Composable () -> Unit)? = null,
+    ts: Float = 1f,
 ) {
     Row(
         Modifier.fillMaxSize().padding(horizontal = 10.dp),
@@ -531,8 +576,8 @@ private fun BannerRow(
         lead()
         Spacer(Modifier.width(9.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-            Label(title, size = 13, weight = FontWeight.SemiBold)
-            if (subtitle.isNotBlank()) Label(subtitle, color = Muted, size = 11, weight = FontWeight.Normal)
+            Label(title, size = (13 * ts).roundToInt(), weight = FontWeight.SemiBold)
+            if (subtitle.isNotBlank()) Label(subtitle, color = Muted, size = (11 * ts).roundToInt(), weight = FontWeight.Normal)
         }
         if (trail != null) {
             Spacer(Modifier.width(8.dp))
@@ -542,31 +587,33 @@ private fun BannerRow(
 }
 
 @Composable
-private fun BannerRing(percent: Int, color: Color, icon: ImageVector) {
-    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+private fun BannerRing(percent: Int, color: Color, icon: ImageVector, ts: Float = 1f) {
+    Box(Modifier.size((28 * ts).dp), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(
             progress = { percent / 100f },
             modifier = Modifier.fillMaxSize(),
             color = color, trackColor = color.copy(alpha = 0.18f),
             strokeWidth = 2.5.dp, strokeCap = StrokeCap.Round
         )
-        Icon(icon, null, tint = color, modifier = Modifier.size(14.dp))
+        Icon(icon, null, tint = color, modifier = Modifier.size((14 * ts).dp))
     }
 }
 
 @Composable
-private fun BannerBadge(icon: ImageVector, tint: Color, bg: Color) {
+private fun BannerBadge(icon: ImageVector, tint: Color, bg: Color, ts: Float = 1f) {
     Box(
-        Modifier.size(28.dp).clip(CircleShape).background(bg),
+        Modifier.size((28 * ts).dp).clip(CircleShape).background(bg),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(15.dp))
+        Icon(icon, null, tint = tint, modifier = Modifier.size((15 * ts).dp))
     }
 }
 
 @Composable
 private fun Banner(m: IslandMode, queued: Int) {
     val primary = MaterialTheme.colorScheme.primary
+    val kindStyles by IslandSettings.kindStyles.collectAsState()
+    val ts = kindOf(m)?.let { kindStyles[it.key]?.text } ?: 1f
     when (m) {
         is IslandMode.Charging -> {
             val c = if (m.connected) Green else Orange
@@ -574,44 +621,49 @@ private fun Banner(m: IslandMode, queued: Int) {
                 lead = {
                     BannerRing(
                         m.percent, c,
-                        if (m.connected) Icons.Rounded.Bolt else Icons.Rounded.BatteryStd
+                        if (m.connected) Icons.Rounded.Bolt else Icons.Rounded.BatteryStd, ts
                     )
                 },
                 title = if (m.connected) "Charging" else "Charger removed",
                 subtitle = if (m.connected) "Power connected" else "Unplugged",
-                trail = { Label("${m.percent}%", color = c, size = 14, weight = FontWeight.Bold) }
+                trail = { Label("${m.percent}%", color = c, size = (14 * ts).roundToInt(), weight = FontWeight.Bold) },
+                ts = ts
             )
         }
         is IslandMode.LowBattery -> BannerRow(
-            lead = { BannerRing(m.percent, Red, Icons.Rounded.BatteryAlert) },
+            lead = { BannerRing(m.percent, Red, Icons.Rounded.BatteryAlert, ts) },
             title = if (m.percent <= 10) "Battery very low" else "Battery low",
             subtitle = "Plug in your charger",
-            trail = { Label("${m.percent}%", color = Red, size = 14, weight = FontWeight.Bold) }
+            trail = { Label("${m.percent}%", color = Red, size = (14 * ts).roundToInt(), weight = FontWeight.Bold) },
+            ts = ts
         )
         is IslandMode.Notification -> BannerRow(
-            lead = { Avatar(m.app, 28.dp) },
+            lead = { Avatar(m.app, (28 * ts).dp) },
             title = m.title.ifBlank { m.app },
             subtitle = m.text.ifBlank { m.app },
             trail = {
                 if (queued > 0) CountBadge(queued, primary)
-                else Box(Modifier.size(7.dp).clip(CircleShape).background(primary))
-            }
+                else Box(Modifier.size((7 * ts).dp).clip(CircleShape).background(primary))
+            },
+            ts = ts
         )
         is IslandMode.Device -> BannerRow(
             lead = {
                 BannerBadge(
                     if (m.headphones) Icons.Rounded.Headphones else Icons.Rounded.BluetoothConnected,
-                    Color(0xFF0A84FF), Color(0xFF0A2540)
+                    Color(0xFF0A84FF), Color(0xFF0A2540), ts
                 )
             },
             title = "Connected",
             subtitle = m.name,
-            trail = { Icon(Icons.Rounded.CheckCircle, null, tint = Green, modifier = Modifier.size(17.dp)) }
+            trail = { Icon(Icons.Rounded.CheckCircle, null, tint = Green, modifier = Modifier.size((17 * ts).dp)) },
+            ts = ts
         )
         is IslandMode.Toggle -> BannerRow(
-            lead = { BannerBadge(m.icon(), m.tint(), m.tint().copy(alpha = 0.18f)) },
+            lead = { BannerBadge(m.icon(), m.tint(), m.tint().copy(alpha = 0.18f), ts) },
             title = m.title(),
-            subtitle = m.subtitle()
+            subtitle = m.subtitle(),
+            ts = ts
         )
         else -> Compact(m, queued, null)
     }
@@ -860,10 +912,32 @@ private fun Expanded(m: IslandMode, level: IslandLevel, a: IslandActions) {
                 Spacer(Modifier.height(3.dp))
                 Label(m.title.ifBlank { m.app }, size = 17, weight = FontWeight.SemiBold, lines = if (large) 2 else 1)
                 Spacer(Modifier.height(2.dp))
+                val isDl = m.kind == LiveKind.Download
                 Label(
                     m.text, color = Color(0xFFD1D1D6), size = 14,
-                    lines = if (large) 3 else 2, weight = FontWeight.Normal
+                    lines = if (isDl) 1 else if (large) 3 else 2, weight = FontWeight.Normal
                 )
+                if (isDl) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (m.progress >= 0) {
+                            LinearProgressIndicator(
+                                progress = { m.progress / 100f },
+                                modifier = Modifier.weight(1f).height(5.dp).clip(CircleShape),
+                                color = LiveBlue, trackColor = LiveBlue.copy(alpha = 0.2f),
+                                strokeCap = StrokeCap.Round
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Label("${m.progress}%", color = LiveBlue, size = 12, weight = FontWeight.Bold)
+                        } else {
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
+                                color = LiveBlue, trackColor = LiveBlue.copy(alpha = 0.2f),
+                                strokeCap = StrokeCap.Round
+                            )
+                        }
+                    }
+                }
             }
         }
     }

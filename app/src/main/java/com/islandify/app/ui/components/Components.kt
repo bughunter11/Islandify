@@ -203,7 +203,6 @@ internal fun PreviewCard(scale: Float, w: Float, h: Float) {
     val glow by IslandSettings.glow.collectAsState()
     val haptics by IslandSettings.haptics.collectAsState()
     val useAppAccent by IslandSettings.islandAppAccent.collectAsState()
-
     Surface(
         shape = RoundedCornerShape(32.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -261,6 +260,12 @@ internal fun PreviewCard(scale: Float, w: Float, h: Float) {
                     .padding(horizontal = 14.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                FilterChip(
+                    selected = level == IslandLevel.Banner,
+                    onClick = { level = IslandLevel.Banner },
+                    label = { Text(stringResource(R.string.preview_banner)) },
+                    leadingIcon = { Icon(Icons.Rounded.Notifications, null, Modifier.size(18.dp)) }
+                )
                 Demo.entries.forEach { d ->
                     FilterChip(
                         selected = demo == d,
@@ -482,6 +487,8 @@ internal fun Trigger.icon(): ImageVector = when (this) {
     Trigger.Toggles -> Icons.AutoMirrored.Rounded.VolumeOff
     Trigger.Navigation -> Icons.Rounded.Navigation
     Trigger.Tracking -> Icons.Rounded.DeliveryDining
+    Trigger.Downloads -> Icons.Rounded.Download
+    Trigger.Quiet -> Icons.Rounded.NotificationsNone
 }
 
 @StringRes
@@ -496,6 +503,8 @@ internal fun Trigger.hint(): Int = when (this) {
     Trigger.Toggles -> R.string.hint_toggles
     Trigger.Navigation -> R.string.hint_navigation
     Trigger.Tracking -> R.string.hint_tracking
+    Trigger.Downloads -> R.string.hint_downloads
+    Trigger.Quiet -> R.string.hint_quiet
 }
 
 /** Compact screen title bar. [shrink] returns 0..1 (how far the content has scrolled). */

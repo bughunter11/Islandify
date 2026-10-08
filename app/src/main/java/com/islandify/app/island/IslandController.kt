@@ -55,12 +55,18 @@ sealed interface IslandMode {
     /** Silent / vibrate / Do Not Disturb / flashlight just changed. [on] = the new state. */
     data class Toggle(val kind: ToggleKind, val on: Boolean) : IslandMode
     /** Navigation or delivery / ride tracking, read from the other app's ongoing notification. */
-    data class Live(val kind: LiveKind, val app: String, val title: String, val text: String) : IslandMode
+    data class Live(
+        val kind: LiveKind,
+        val app: String,
+        val title: String,
+        val text: String,
+        val progress: Int = -1,    // 0..100, -1 = unknown (spinner)
+    ) : IslandMode
 }
 
 enum class ToggleKind { Silent, Vibrate, Dnd, Flashlight }
 
-enum class LiveKind { Navigation, Tracking }
+enum class LiveKind { Navigation, Tracking, Download }
 
 /** The 4 island sizes: small pill, banner (quick popups), card, and large card. */
 enum class IslandLevel { Compact, Banner, Expanded, Large }
@@ -106,6 +112,11 @@ object IslandController {
     private var liveKey: String? = null
     private var liveOpen: PendingIntent? = null
     private var livePkg: String? = null
+
+    // Downloads / progress-bar notifications. Insertion order = the first running download is shown.
+    private class Dl(val mode: IslandMode.Live, val open: PendingIntent?, val pkg: String?)
+    private val downloads = LinkedHashMap<String, Dl>()
+    private var dlMode: IslandMode.Live? = null
     private var hidden = false
     private var flashJob: Job? = null
 
@@ -141,7 +152,7 @@ object IslandController {
     private fun base(): IslandMode {
         callMode?.let { return it }
         if (hidden) return IslandMode.Idle
-        return timerMode ?: liveMode ?: (if (pausedHide) null else mediaMode) ?: IslandMode.Idle
+        return timerMode ?: liveMode ?: dlMode ?: (if (pausedHide) null else mediaMode) ?: IslandMode.Idle
     }
 
     private fun refresh() {
@@ -189,7 +200,7 @@ object IslandController {
     private fun openSource(): Boolean = when (_mode.value) {
         is IslandMode.Media -> openMediaApp()
         is IslandMode.Notification -> openNotification()
-        is IslandMode.Live -> openNotification(liveOpen, livePkg)
+        is IslandMode.Live -> openLive()
         else -> false
     }
 
@@ -201,6 +212,14 @@ object IslandController {
      */
     private fun openNotification(pi: PendingIntent? = flashOpen, pkg: String? = flashPkg): Boolean =
         sendWithBal(pi) || launchPackage(pkg)
+
+    private fun openLive(): Boolean {
+        val m = _mode.value as? IslandMode.Live
+        return if (m?.kind == LiveKind.Download) {
+            val d = downloads.values.firstOrNull()
+            openNotification(d?.open, d?.pkg)
+        } else openNotification(liveOpen, livePkg)
+    }
 
     private fun launchPackage(pkg: String?): Boolean {
         val ctx = appCtx ?: return false
@@ -363,7 +382,9 @@ object IslandController {
     ) {
         // A ringing / ongoing call owns the island: a message must never cover Answer / Decline.
         if (callMode != null) return
-        val item = Flash(m, durationMs, level, open, pkg, reply, markRead)
+        // Per-banner "show time" from Customize (0 / unset = the default time of the caller)
+        val shownMs = if (level == IslandLevel.Banner) IslandSettings.kindDurationMs(m) ?: durationMs else durationMs
+        val item = Flash(m, shownMs, level, open, pkg, reply, markRead)
 
         val showing = flashJob?.isActive == true
         if (showing || _replying.value) {
@@ -610,6 +631,37 @@ object IslandController {
         liveOpen = null
         livePkg = null
         if (_mode.value is IslandMode.Live) _level.value = IslandLevel.Compact
+        refresh()
+    }
+
+    /* ---------------- downloads ---------------- */
+
+    /** Download / progress notification started or updated. [key] = the source notification. */
+    fun setDownload(m: IslandMode.Live, key: String, open: PendingIntent?, pkg: String?) {
+        val old = downloads[key]
+        if (old != null && old.mode == m) return          // nothing changed
+        if (old == null) hidden = false                   // a new download shows again after a swipe-up
+        downloads[key] = Dl(m, open, pkg)                 // replacing keeps the order
+        syncDownload()
+    }
+
+    /** [key] = the notification that was removed. null = drop all downloads. */
+    fun clearDownload(key: String? = null) {
+        if (key == null) downloads.clear()
+        else if (downloads.remove(key) == null) return
+        syncDownload()
+    }
+
+    private fun syncDownload() {
+        val first = downloads.values.firstOrNull()
+        dlMode = first?.mode?.let {
+            // More than one download running: show "(+N)"
+            if (downloads.size > 1) it.copy(text = "${it.text}  (+${downloads.size - 1})") else it
+        }
+        val cur = _mode.value
+        if (dlMode == null && cur is IslandMode.Live && cur.kind == LiveKind.Download) {
+            _level.value = IslandLevel.Compact
+        }
         refresh()
     }
 

@@ -105,6 +105,12 @@ class IslandListener : NotificationListenerService() {
                 ?.filter { it.packageName !in IslandSettings.blockedApps.value }
                 ?.forEach { handleClockTimer(it) }
         }
+        // Download jo already chal raha ho
+        runCatching {
+            activeNotifications
+                ?.filter { it.packageName !in IslandSettings.blockedApps.value && it.packageName != packageName }
+                ?.forEach { handleDownload(it) }
+        }
         msm = getSystemService(MediaSessionManager::class.java)
         runCatching { msm.addOnActiveSessionsChangedListener(sessionsListener, cn) }
         refreshSessions()
@@ -146,6 +152,13 @@ class IslandListener : NotificationListenerService() {
                 if (sbn.packageName in blocked) IslandController.dropClockTimerSilently(sbn.key)
                 else handleClockTimer(sbn)
             }
+        }
+
+        // Downloads
+        IslandController.clearDownload()
+        if (IslandSettings.isOn(Trigger.Downloads)) {
+            active.filter { it.packageName !in blocked && it.packageName != packageName }
+                .forEach { handleDownload(it) }
         }
     }
 
@@ -247,23 +260,39 @@ class IslandListener : NotificationListenerService() {
         // Navigation / delivery / ride tracking: their ongoing notification becomes a live activity
         if (handleLive(sbn)) return
 
+        // Download / upload / any progress-bar notification: live progress on the island
+        if (handleDownload(sbn)) return
+
         if (!IslandSettings.isOn(Trigger.Notifications)) return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
-        if (n.flags and Notification.FLAG_ONGOING_EVENT != 0) return
-        if (n.category == Notification.CATEGORY_TRANSPORT ||
-            n.category == Notification.CATEGORY_PROGRESS ||
-            n.category == Notification.CATEGORY_SERVICE
-        ) return
+        if (n.category == Notification.CATEGORY_TRANSPORT) return   // music has its own UI
 
-        // Silent (LOW / MIN importance) channels do not belong on the island
+        // "Quiet" switch ON = silent, ongoing, service and progress notifications show too
+        val all = IslandSettings.isOn(Trigger.Quiet)
+        val ongoing = n.flags and Notification.FLAG_ONGOING_EVENT != 0
+        if (!all) {
+            if (ongoing) return
+            if (n.category == Notification.CATEGORY_PROGRESS ||
+                n.category == Notification.CATEGORY_SERVICE
+            ) return
+        }
+
+        // Silent (LOW / MIN importance) channels
+        var quiet = false
         val rank = NotificationListenerService.Ranking()
         if (currentRanking.getRanking(sbn.key, rank) &&
             rank.importance < NotificationManager.IMPORTANCE_DEFAULT
-        ) return
+        ) {
+            if (!all) return
+            quiet = true
+        }
 
         val title = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = bodyOf(n)
         if (title.isBlank() && text.isBlank()) return
+
+        // Ongoing notifications must not pop up on every update: only the first time
+        if (ongoing && shown.containsKey(sbn.key)) return
 
         // The same notification posted again (count update etc.): do not show it twice
         val sig = "$title|$text|${n.`when`}".hashCode()
@@ -297,7 +326,11 @@ class IslandListener : NotificationListenerService() {
                 canMarkRead = markRead != null,
             ),
             // Cards with buttons stay a bit longer so there is time to tap them
-            durationMs = if (reply != null || markRead != null) 8000L else 4500L,
+            durationMs = when {
+                reply != null || markRead != null -> 8000L
+                quiet || ongoing -> 3000L     // silent / ongoing: shorter pop-up
+                else -> 4500L
+            },
             open = n.contentIntent,
             pkg = sbn.packageName,
             reply = reply,
@@ -309,6 +342,7 @@ class IslandListener : NotificationListenerService() {
         if (isCall(sbn)) IslandController.clearCall(sbn.key)
         IslandController.clearLive(sbn.key)
         IslandController.clearClockTimer(sbn.key)
+        IslandController.clearDownload(sbn.key)
         textTimers.remove(sbn.key)
         shown.remove(sbn.key)
     }
@@ -430,6 +464,46 @@ class IslandListener : NotificationListenerService() {
             IslandMode.Live(kind, app, title, text),
             key = sbn.key,
             open = sbn.notification.contentIntent,
+            pkg = sbn.packageName,
+        )
+        return true
+    }
+
+    /* ---------------- downloads / progress ---------------- */
+
+    /**
+     * True = this was a progress-bar notification (shown, or deliberately ignored).
+     * False = no progress bar: continue as a normal notification. That is how the
+     * "Download complete" notification becomes a normal pop-up.
+     */
+    private fun handleDownload(sbn: StatusBarNotification): Boolean {
+        val n = sbn.notification
+        val ex = n.extras
+        val max = ex.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
+        val indeterminate = ex.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)
+
+        // Progress bar gone = download finished: remove it from the island
+        if (max <= 0 && !indeterminate) {
+            IslandController.clearDownload(sbn.key)
+            return false
+        }
+        if (n.category == Notification.CATEGORY_TRANSPORT || n.category == Notification.CATEGORY_CALL) return false
+        if (!IslandSettings.isOn(Trigger.Downloads)) return true
+
+        val percent = if (!indeterminate && max > 0) {
+            (ex.getInt(Notification.EXTRA_PROGRESS, 0) * 100L / max).toInt().coerceIn(0, 100)
+        } else -1
+
+        val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        val body = bodyOf(n)
+        val text = body.ifBlank { if (percent >= 0) "$percent%" else "" }
+        val app = appLabel(sbn)
+        if (title.isBlank() && text.isBlank()) return true
+
+        IslandController.setDownload(
+            IslandMode.Live(LiveKind.Download, app, title, text, percent),
+            key = sbn.key,
+            open = n.contentIntent,
             pkg = sbn.packageName,
         )
         return true

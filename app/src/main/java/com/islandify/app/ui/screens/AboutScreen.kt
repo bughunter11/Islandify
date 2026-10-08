@@ -18,10 +18,13 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -107,6 +110,33 @@ fun AboutScreen(tick: Int) {
             InfoRow(stringResource(R.string.about_island), stringResource(if (running) R.string.about_running else R.string.common_off))
         }
 
+        SectionCard(title = stringResource(R.string.about_developer), icon = Icons.Rounded.Code) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "R",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Raj", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.about_dev_role),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            LinkRow(Icons.AutoMirrored.Rounded.Send, "Telegram", "https://t.me/zyronix01")
+            LinkRow(Icons.Rounded.Code, "GitHub", "https://github.com/bughunter11")
+        }
+
         SectionCard(title = stringResource(R.string.about_setup_title), icon = Icons.Rounded.CheckCircle) {
             Text(
                 if (missing == 0) stringResource(R.string.about_all_set) else stringResource(R.string.about_needs_attention, missing, statuses.size),
@@ -155,6 +185,39 @@ fun AboutScreen(tick: Int) {
                 }) { Text(stringResource(R.string.about_btn_guide)) }
             }
         }
+    }
+}
+
+/** A tappable row that opens a link (the link itself is not shown). */
+@Composable
+private fun LinkRow(icon: ImageVector, title: String, url: String) {
+    val ctx = LocalContext.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable {
+                runCatching {
+                    ctx.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, Modifier.size(22.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(
+            title,
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium
+        )
+        Icon(
+            Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

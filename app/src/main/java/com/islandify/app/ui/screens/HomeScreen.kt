@@ -206,8 +206,15 @@ fun HomeScreen(tick: Int) {
                         "demo", null, null
                     )
                 },
+                TestAction(R.string.trigger_downloads, Icons.Rounded.Download) {
+                    IslandController.setDownload(
+                        IslandMode.Live(LiveKind.Download, "Chrome", "movie.mp4", "45 MB of 120 MB", 38),
+                        "demo-dl", null, null
+                    )
+                },
                 TestAction(R.string.test_clear_live, Icons.Rounded.Close) {
                     IslandController.clearLive()
+                    IslandController.clearDownload()
                 },
             ))
             TestGroup(R.string.test_group_combo, listOf(

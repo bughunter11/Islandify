@@ -24,6 +24,68 @@ enum class Trigger(val key: String, @StringRes val label: Int) {
     Toggles("toggles", R.string.trigger_toggles),
     Navigation("nav", R.string.trigger_navigation),
     Tracking("track", R.string.trigger_tracking),
+    Downloads("download", R.string.trigger_downloads),
+    Quiet("quiet", R.string.trigger_quiet),
+}
+
+/**
+ * Everything the island can show. Each kind has its own look (Customize > Pop-ups & activities).
+ * [popup] = shown as a quick banner; the others (music, timer, call, navigation...) live in the small pill.
+ */
+enum class IslandKind(val key: String, @StringRes val label: Int, val popup: Boolean) {
+    Notification("notif", R.string.banner_notification, true),
+    Charging("charging", R.string.banner_charging, true),
+    Unplugged("unplug", R.string.banner_unplugged, true),
+    LowBattery("low", R.string.banner_low, true),
+    Device("device", R.string.banner_device, true),
+    Silent("silent", R.string.banner_silent, true),
+    Vibrate("vibrate", R.string.banner_vibrate, true),
+    Dnd("dnd", R.string.banner_dnd, true),
+    Flashlight("torch", R.string.banner_flash, true),
+    Call("call", R.string.banner_call, false),
+    Media("media", R.string.banner_music, false),
+    Timer("timer", R.string.banner_timer, false),
+    Navigation("nav", R.string.banner_nav, false),
+    Tracking("track", R.string.banner_tracking, false),
+    Download("download", R.string.banner_download, false),
+}
+
+/**
+ * w / h = length / height of the pop-up banner (or of the small pill for music, timer, call...).
+ * cardW / cardH = size of the card that opens when tapped. text = text size. All 1 = normal.
+ * corner < 0 = follow the global roundness. durationSec 0 = auto.
+ */
+data class KindStyle(
+    val w: Float = 1f,
+    val h: Float = 1f,
+    val text: Float = 1f,
+    val corner: Float = -1f,
+    val durationSec: Int = 0,
+    val cardW: Float = 1f,
+    val cardH: Float = 1f,
+)
+
+/** Which kind a mode is (null = the idle pill). */
+fun kindOf(m: IslandMode): IslandKind? = when (m) {
+    is IslandMode.Notification -> IslandKind.Notification
+    is IslandMode.Charging -> if (m.connected) IslandKind.Charging else IslandKind.Unplugged
+    is IslandMode.LowBattery -> IslandKind.LowBattery
+    is IslandMode.Device -> IslandKind.Device
+    is IslandMode.Toggle -> when (m.kind) {
+        ToggleKind.Silent -> IslandKind.Silent
+        ToggleKind.Vibrate -> IslandKind.Vibrate
+        ToggleKind.Dnd -> IslandKind.Dnd
+        ToggleKind.Flashlight -> IslandKind.Flashlight
+    }
+    is IslandMode.Call -> IslandKind.Call
+    is IslandMode.Media -> IslandKind.Media
+    is IslandMode.Timer -> IslandKind.Timer
+    is IslandMode.Live -> when (m.kind) {
+        LiveKind.Navigation -> IslandKind.Navigation
+        LiveKind.Tracking -> IslandKind.Tracking
+        LiveKind.Download -> IslandKind.Download
+    }
+    IslandMode.Idle -> null
 }
 
 /**
@@ -42,6 +104,9 @@ object IslandSettings {
     val heightScale = MutableStateFlow(1f)  // 0.7x .. 1.6x
     val offsetX = MutableStateFlow(0f)      // dp, left (-) / right (+) of center
     val offsetY = MutableStateFlow(10f)     // dp, down from the top of the screen
+
+    // Every quick pop-up banner type has its own size / text / roundness / show time
+    val kindStyles = MutableStateFlow<Map<String, KindStyle>>(emptyMap())
 
     val corner = MutableStateFlow(1f)       // 0.2 .. 1
     val animSpeed = MutableStateFlow(1f)    // 0.5 .. 2
@@ -74,6 +139,18 @@ object IslandSettings {
         heightScale.value = p.getFloat("h", 1f)
         offsetX.value = p.getFloat("x", 0f)
         offsetY.value = p.getFloat("y", 10f)
+        kindStyles.value = IslandKind.entries.associate { t ->
+            val k = "bn_${t.key}"
+            t.key to KindStyle(
+                w = p.getFloat("${k}_w", 1f),
+                h = p.getFloat("${k}_h", 1f),
+                text = p.getFloat("${k}_t", 1f),
+                corner = p.getFloat("${k}_c", -1f),
+                durationSec = p.getInt("${k}_d", 0),
+                cardW = p.getFloat("${k}_cw", 1f),
+                cardH = p.getFloat("${k}_ch", 1f),
+            )
+        }
         corner.value = p.getFloat("corner", 1f)
         animSpeed.value = p.getFloat("speed", 1f)
         glow.value = p.getBoolean("glow", true)
@@ -125,7 +202,27 @@ object IslandSettings {
             ?.putBoolean("onboarded", onboarded.value)
             ?.putBoolean("enabled", enabled.value)
             ?.apply()
+        // Banner styles (one set of keys per banner type)
+        prefs?.edit()?.also { e ->
+            IslandKind.entries.forEach { t ->
+                val b = kindStyle(t)
+                val k = "bn_${t.key}"
+                e.putFloat("${k}_w", b.w).putFloat("${k}_h", b.h).putFloat("${k}_t", b.text)
+                    .putFloat("${k}_c", b.corner).putInt("${k}_d", b.durationSec)
+                    .putFloat("${k}_cw", b.cardW).putFloat("${k}_ch", b.cardH)
+            }
+        }?.apply()
     }
+
+    fun kindStyle(t: IslandKind): KindStyle = kindStyles.value[t.key] ?: KindStyle()
+
+    fun setKindStyle(t: IslandKind, style: KindStyle) {
+        kindStyles.value = kindStyles.value + (t.key to style)
+    }
+
+    /** Custom "show time" for this pop-up, or null = use the app's default time. */
+    fun kindDurationMs(m: IslandMode): Long? =
+        kindOf(m)?.let { kindStyle(it).durationSec }?.takeIf { it > 0 }?.let { it * 1000L }
 
     fun isOn(t: Trigger) = t.key in triggers.value
 
@@ -148,6 +245,11 @@ object IslandSettings {
 
     fun resetShape() = preset(1f, 1f, 1f)
 
+    fun resetKinds() {
+        kindStyles.value = emptyMap()
+        save()
+    }
+
     fun resetLook() {
         corner.value = 1f
         animSpeed.value = 1f
@@ -168,6 +270,7 @@ object IslandSettings {
     /** Island + look + behaviour + colors + theme. (Triggers and blocked apps are kept.) */
     fun resetAll() {
         reset()
+        resetKinds()
         resetLook()
         autoCollapseSec.value = 6
         swipeSkip.value = true

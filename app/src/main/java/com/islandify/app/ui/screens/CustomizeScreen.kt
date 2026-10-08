@@ -97,6 +97,9 @@ fun CustomizeScreen() {
             )
         }
 
+        /* ---------- Banners: pick one, then customize it ---------- */
+        KindCustomizeCard()
+
         /* ---------- Animation & feel ---------- */
         SectionCard(title = stringResource(R.string.cust_anim_title), icon = Icons.Rounded.Speed) {
             SettingSlider(
