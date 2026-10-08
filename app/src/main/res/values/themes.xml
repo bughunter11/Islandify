@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Real app theme (Material 3, follows system light / dark), applied after the splash screen -->
+    <style name="Theme.Islandify.App" parent="Theme.Material3.DayNight.NoActionBar" />
+
+    <!-- Launch theme: splash screen first, then switches to Theme.Islandify.App -->
+    <style name="Theme.Islandify" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_bg</item>
+        <item name="postSplashScreenTheme">@style/Theme.Islandify.App</item>
+    </style>
+</resources>

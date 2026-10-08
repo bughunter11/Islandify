@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Island pill with a camera dot and three waveform bars cut out (alpha mask only) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M7,7 h10 a5,5 0 0 1 0,10 h-10 a5,5 0 0 1 0,-10z M7,12 m-2,0 a2,2 0 1 0 4,0 a2,2 0 1 0 -4,0z M11,10.5 h1.6 v3 h-1.6z M14,9.5 h1.6 v5 h-1.6z M17,10.8 h1.6 v2.4 h-1.6z" />
+</vector>
