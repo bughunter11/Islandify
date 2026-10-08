@@ -8,6 +8,10 @@
 
 > Package: `com.islandify.app` | Version 1.0 | Android 8.0+ (API 26)
 
+https://t.me/Zyron_Official_26
+
+https://t.me/Zyron_Community_26
+
 ## What it shows
 
 | Activity | What happens |
