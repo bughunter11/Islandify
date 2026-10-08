@@ -184,6 +184,8 @@
     <string name="cust_seconds">%1$d सेक</string>
     <string name="cust_idle_pill">खाली पिल हमेशा दिखाएँ</string>
     <string name="cust_idle_pill_sub">छोटी पिल स्क्रीन पर रहती है; समय, तारीख़ और बैटरी के लिए टैप करें</string>
+    <string name="cust_sticky_notif">नोटिफिकेशन हटाने तक रुकें</string>
+    <string name="cust_sticky_notif_sub">कुछ सेकंड बाद नोटिफिकेशन छोटी पिल में सिमट जाएगा और तब तक वहीं रहेगा जब तक आप उसे टैप, ऊपर स्वाइप, रिप्लाई या मार्क ऐज़ रीड न करें</string>
     <string name="cust_swipe_skip">स्वाइप करके गाने बदलें</string>
     <string name="cust_swipe_skip_sub">अगले के लिए आइलैंड बाएँ, पिछले के लिए दाएँ स्वाइप करें</string>
     <string name="cust_app_accent">आइलैंड ऐप का एक्सेंट रंग इस्तेमाल करे</string>
@@ -214,4 +216,18 @@
     <string name="test_group_live">लाइव गतिविधियाँ</string>
     <string name="test_group_combo">कॉम्बो</string>
     <string name="lang_title">भाषा</string>
+    <string name="cust_swipe_title">स्वाइप जेस्चर</string>
+    <string name="cust_swipe_up">ऊपर स्वाइप</string>
+    <string name="cust_swipe_down">नीचे स्वाइप</string>
+    <string name="cust_swipe_left">बाएँ स्वाइप</string>
+    <string name="cust_swipe_right">दाएँ स्वाइप</string>
+    <string name="cust_swipe_hint">हर स्वाइप का काम चुनें। संगीत वाले काम तभी चलते हैं जब आइलैंड पर संगीत हो।</string>
+    <string name="swipe_act_none">कुछ नहीं</string>
+    <string name="swipe_act_dismiss">हटाएँ / छिपाएँ</string>
+    <string name="swipe_act_clear">सभी पॉप-अप हटाएँ</string>
+    <string name="swipe_act_expand">कार्ड खोलें</string>
+    <string name="swipe_act_open">ऐप खोलें</string>
+    <string name="swipe_act_next">अगला गाना</string>
+    <string name="swipe_act_prev">पिछला गाना</string>
+    <string name="swipe_act_playpause">चलाएँ / रोकें</string>
 </resources>

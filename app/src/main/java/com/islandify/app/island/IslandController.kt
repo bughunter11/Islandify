@@ -121,7 +121,7 @@ object IslandController {
     private var flashJob: Job? = null
 
     /** A banner (notification / charging / device...) that is on screen or waiting for its turn. */
-    private class Flash(
+    private data class Flash(
         val mode: IslandMode,
         val durationMs: Long,
         val level: IslandLevel,
@@ -129,7 +129,20 @@ object IslandController {
         val pkg: String?,
         val reply: android.app.Notification.Action?,
         val markRead: PendingIntent?,
+        val key: String? = null,        // source notification key (so removing it from the shade clears the pill)
+        val seen: Boolean = false,      // sticky notification that was already shown: comes back as a small pill
     )
+
+    /** The banner that is on screen right now (needed to park a sticky pill behind newer banners). */
+    private var curFlash: Flash? = null
+
+    /**
+     * "Keep notifications until dismissed" is active for the banner on screen: after its show time it
+     * shrinks to the small pill and STAYS there (no timer, so it is still there when the phone is
+     * unlocked later) until tap / swipe up / Mark as read / reply / removed from the shade.
+     */
+    private var stickyFlag = false
+    private val stickyHeld get() = stickyFlag && flashJob?.isActive == true
 
     private val flashQueue = ArrayDeque<Flash>()
 
@@ -188,7 +201,7 @@ object IslandController {
             if (!opensApp) {
                 if (flashJob?.isActive == true) {
                     flashJob?.cancel()
-                    startFlash(Flash(m, 7000, IslandLevel.Expanded, flashOpen, flashPkg, flashReply, flashMarkRead))
+                    startFlash(Flash(m, 7000, IslandLevel.Expanded, flashOpen, flashPkg, flashReply, flashMarkRead, curFlash?.key))
                 } else _level.value = IslandLevel.Expanded
                 return
             }
@@ -244,7 +257,7 @@ object IslandController {
         val next = if (_level.value == IslandLevel.Large) IslandLevel.Expanded else IslandLevel.Large
         if (flashJob?.isActive == true) {
             flashJob?.cancel()
-            startFlash(Flash(m, 9000, next, flashOpen, flashPkg, flashReply, flashMarkRead))
+            startFlash(Flash(m, 9000, next, flashOpen, flashPkg, flashReply, flashMarkRead, curFlash?.key))
         } else _level.value = next
     }
 
@@ -255,6 +268,40 @@ object IslandController {
             flashJob?.isActive == true -> endFlash()
             _level.value != IslandLevel.Compact -> _level.value = IslandLevel.Compact
             callMode == null && _mode.value !is IslandMode.Idle -> { hidden = true; refresh() }
+        }
+    }
+
+    /** Swipe up (default): current pop-up + all waiting pop-ups go. Music / timer / nav are NOT hidden. */
+    fun clearAll() {
+        flashQueue.clear()          // clear the queue first, otherwise the next pop-up shows after endFlash()
+        _queued.value = 0
+        when {
+            _replying.value -> cancelReply()
+            flashJob?.isActive == true -> endFlash()                      // pop-up / sticky pill
+            _level.value != IslandLevel.Compact -> _level.value = IslandLevel.Compact
+            // nothing left to clear: the island stays as it is
+        }
+    }
+
+    private fun musicOnIsland(): Boolean {
+        val m = _mode.value
+        return media != null && (m is IslandMode.Media ||
+            ((m is IslandMode.Live || m is IslandMode.Timer) && mediaMode != null))
+    }
+
+    /** A swipe on the island: runs whatever the user chose for that direction (Customize > Swipe gestures). */
+    fun swipe(dir: SwipeDir) {
+        when (IslandSettings.swipeFlow(dir).value) {
+            SwipeAction.None -> Unit
+            SwipeAction.Dismiss -> dismiss()
+            SwipeAction.ClearAll -> clearAll()
+            SwipeAction.Expand -> if (!_replying.value && _level.value == IslandLevel.Compact) toggle()
+            SwipeAction.OpenApp -> if (!_replying.value && openSource()) {
+                if (flashJob?.isActive == true) endFlash() else _level.value = IslandLevel.Compact
+            }
+            SwipeAction.NextTrack -> if (musicOnIsland()) next()
+            SwipeAction.PrevTrack -> if (musicOnIsland()) prev()
+            SwipeAction.PlayPause -> if (musicOnIsland()) playPause()
         }
     }
 
@@ -321,8 +368,9 @@ object IslandController {
         callDecline = decline
         hidden = false
         _replying.value = false
+        if (stickyHeld) curFlash?.let { parkSticky(it) }   // keep the sticky pill (before cancel)
         flashJob?.cancel()
-        flashQueue.clear()
+        flashQueue.removeAll { !it.seen }                   // drop only unseen pop-ups, keep sticky ones
         _queued.value = 0
         _mode.value = c
         if (incoming) _level.value = IslandLevel.Expanded
@@ -338,7 +386,8 @@ object IslandController {
         callAnswer = null
         callDecline = null
         _level.value = IslandLevel.Compact
-        refresh()
+        // a sticky pill waiting from before the call comes back
+        if (flashQueue.isNotEmpty() && flashJob?.isActive != true) afterFlash() else refresh()
     }
 
     /** Android 14+ blocks activity PendingIntents sent from the background unless we opt in. */
@@ -379,12 +428,13 @@ object IslandController {
         pkg: String? = null,
         reply: android.app.Notification.Action? = null,
         markRead: PendingIntent? = null,
+        key: String? = null,
     ) {
         // A ringing / ongoing call owns the island: a message must never cover Answer / Decline.
         if (callMode != null) return
         // Per-banner "show time" from Customize (0 / unset = the default time of the caller)
         val shownMs = if (level == IslandLevel.Banner) IslandSettings.kindDurationMs(m) ?: durationMs else durationMs
-        val item = Flash(m, shownMs, level, open, pkg, reply, markRead)
+        val item = Flash(m, shownMs, level, open, pkg, reply, markRead, key)
 
         val showing = flashJob?.isActive == true
         if (showing || _replying.value) {
@@ -397,23 +447,83 @@ object IslandController {
                 else -> false
             }
             if (!updatesCurrent) {
-                enqueue(item)
-                return
+                // A sticky notification that has shrunk to the small pill must not block newer banners:
+                // park it at the front of the queue (it comes back as a pill when they are done).
+                val parked = curFlash
+                if (stickyHeld && !_replying.value && _level.value == IslandLevel.Compact && parked != null) {
+                    parkSticky(parked)
+                } else {
+                    enqueue(item)
+                    return
+                }
             }
         }
         flashJob?.cancel()
         startFlash(item)
     }
 
+    /** Puts a sticky notification back at the front of the queue as an already-seen pill. */
+    private fun parkSticky(f: Flash) {
+        val m = f.mode
+        // Same sender already waiting? Keep only the newest.
+        flashQueue.removeAll { q ->
+            val qm = q.mode
+            q.seen && m is IslandMode.Notification && qm is IslandMode.Notification &&
+                qm.app == m.app && qm.title == m.title
+        }
+        flashQueue.addFirst(f.copy(seen = true, level = IslandLevel.Compact))
+        while (flashQueue.size > MAX_QUEUE) flashQueue.removeLast()
+        _queued.value = flashQueue.size
+    }
+
+    /**
+     * A sticky pill is showing and a NEW (not yet seen) banner is waiting: let the new one show first,
+     * the sticky notification goes back to the queue and returns as a pill afterwards.
+     */
+    private fun onStickyCollapsed() {
+        val cur = curFlash ?: return
+        val i = flashQueue.indexOfFirst { !it.seen }
+        if (i < 0) return
+        val next = flashQueue.removeAt(i)
+        parkSticky(cur)
+        flashJob?.cancel()
+        startFlash(next)
+    }
+
+    /** The notification was removed from the shade (or by its app): its sticky pill goes too. */
+    fun notificationRemoved(key: String) {
+        val before = flashQueue.size
+        flashQueue.removeAll { it.key == key && it.seen }
+        if (flashQueue.size != before) _queued.value = flashQueue.size
+        if (stickyFlag && flashJob?.isActive == true && !_replying.value && curFlash?.key == key) endFlash()
+    }
+
     private fun startFlash(f: Flash) {
+        curFlash = f
         flashOpen = f.open
         flashPkg = f.pkg
         flashReply = f.reply
         flashMarkRead = f.markRead
         hidden = false
         _mode.value = f.mode
-        _level.value = f.level
+        _level.value = if (f.seen) IslandLevel.Compact else f.level
+        // "Keep notifications until I act": a real notification (it has a source app) stays on the
+        // island with no timer. It goes away only by tap / swipe up / Mark as read / reply.
+        // Internal banners (Sent, Time's up, charging...) keep their normal time.
+        val sticky = IslandSettings.stickyNotif.value && f.mode is IslandMode.Notification && f.pkg != null
+        stickyFlag = sticky
         flashJob = scope.launch {
+            if (sticky) {
+                // Show it for its normal time, then shrink to the small pill (auto-collapse) and stay.
+                if (!f.seen) {
+                    delay(f.durationMs)
+                    _level.value = IslandLevel.Compact
+                } else {
+                    delay(60)                // let startFlash() finish assigning flashJob first
+                }
+                onStickyCollapsed()          // a newer banner is waiting? show it first
+                awaitCancellation()          // job stays "active" until endFlash() / dismiss() cancels it
+            }
             delay(f.durationMs)
             _level.value = IslandLevel.Compact
             delay(350)
@@ -425,7 +535,10 @@ object IslandController {
     private fun afterFlash() {
         val next = flashQueue.removeFirstOrNull()
         _queued.value = flashQueue.size
-        if (next != null) startFlash(next) else _mode.value = base()
+        if (next != null) startFlash(next) else {
+            curFlash = null
+            _mode.value = base()
+        }
     }
 
     private fun enqueue(f: Flash) {
@@ -448,6 +561,7 @@ object IslandController {
     }
 
     private fun endFlash() {
+        stickyFlag = false
         flashJob?.cancel()
         _level.value = IslandLevel.Compact
         flashJob = scope.launch {
@@ -468,6 +582,7 @@ object IslandController {
     /** "Reply" button: keeps the card open (no auto-collapse) and shows the text box + keyboard. */
     fun startReply() {
         if (flashReply == null) return
+        stickyFlag = false
         flashJob?.cancel()          // stop the 4.5 s auto-hide while the user types
         _replying.value = true
     }
@@ -671,7 +786,6 @@ object IslandController {
 
     /** Swipe left = next track, swipe right = previous (only while music is on the island). */
     fun skip(dir: Int) {
-        if (!IslandSettings.swipeSkip.value) return
         if (_mode.value !is IslandMode.Media) return
         val t = media?.transportControls ?: return
         if (dir > 0) t.skipToNext() else t.skipToPrevious()
@@ -688,10 +802,15 @@ object IslandController {
                         val sec = IslandSettings.autoCollapseSec.value
                         if (sec <= 0) return@launch
                         delay(sec * 1000L)
-                        if (flashJob?.isActive != true && callMode == null && !_replying.value) _level.value = IslandLevel.Compact
+                        // A sticky notification card (opened by tapping its pill) also collapses back to the pill
+                        if ((flashJob?.isActive != true || stickyHeld) && callMode == null && !_replying.value) {
+                            _level.value = IslandLevel.Compact
+                            if (stickyHeld) onStickyCollapsed()
+                        }
                     }
                 }
             }
         }
     }
 }
+

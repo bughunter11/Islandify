@@ -212,8 +212,10 @@ class IslandOverlay(
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            x = (IslandSettings.offsetX.value * density).toInt()
+            // Position is computed by us in applyPos() (not by Android's CENTER_HORIZONTAL),
+            // so system transitions (app open, call screen, lock) can never leave it off-center.
+            gravity = Gravity.TOP or Gravity.LEFT
+            x = 0
             y = (IslandSettings.offsetY.value * density).toInt()
             // Let the window extend into the camera cutout area
             // The island sits at the top and the keyboard at the bottom, so never resize / pan for the IME
@@ -304,6 +306,7 @@ class IslandOverlay(
                         secondary = secondary,
                         queued = queued,
                         onSwipeSide = IslandController::skip,
+                        onSwipe = IslandController::swipe,
                         appAccent = if (useAppAccent) MaterialTheme.colorScheme.primary else null,
                     )
                     }
@@ -315,6 +318,11 @@ class IslandOverlay(
         v.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_OUTSIDE) IslandController.cancelReply()
             false
+        }
+
+        // Whenever the window size changes (pill grows / shrinks), re-center it ourselves
+        v.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ ->
+            if (r - l != or - ol) v.post { applyPos() }
         }
 
         val added = runCatching { wm.addView(v, lp) }
@@ -345,12 +353,25 @@ class IslandOverlay(
         // Sliders in the app move the island live
         s.launch {
             combine(IslandSettings.offsetX, IslandSettings.offsetY) { x, y -> x to y }
-                .collect { (x, y) ->
-                    val p = params ?: return@collect
-                    p.x = (x * density).toInt()
-                    p.y = (y * density).toInt()
-                    view?.let { runCatching { wm.updateViewLayout(it, p) } }
-                }
+                .collect { applyPos() }
+        }
+    }
+
+    private fun screenW(): Int =
+        if (Build.VERSION.SDK_INT >= 30) wm.currentWindowMetrics.bounds.width()
+        else host.resources.displayMetrics.widthPixels
+
+    /** Center the window horizontally (+ user offset) and apply the vertical offset. */
+    private fun applyPos() {
+        val v = view ?: return
+        val p = params ?: return
+        if (v.width <= 0) return
+        val nx = (screenW() - v.width) / 2 + (IslandSettings.offsetX.value * density).toInt()
+        val ny = (IslandSettings.offsetY.value * density).toInt()
+        if (p.x != nx || p.y != ny) {
+            p.x = nx
+            p.y = ny
+            runCatching { wm.updateViewLayout(v, p) }
         }
     }
 

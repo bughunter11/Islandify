@@ -14,6 +14,7 @@ import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.SystemClock
+import android.telecom.TelecomManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -335,6 +336,7 @@ class IslandListener : NotificationListenerService() {
             pkg = sbn.packageName,
             reply = reply,
             markRead = markRead,
+            key = sbn.key,
         )
     }
 
@@ -343,6 +345,7 @@ class IslandListener : NotificationListenerService() {
         IslandController.clearLive(sbn.key)
         IslandController.clearClockTimer(sbn.key)
         IslandController.clearDownload(sbn.key)
+        IslandController.notificationRemoved(sbn.key)
         textTimers.remove(sbn.key)
         shown.remove(sbn.key)
     }
@@ -361,6 +364,19 @@ class IslandListener : NotificationListenerService() {
      * Many dialers (Oplus / Xiaomi / Samsung / Google) do not always set CATEGORY_CALL,
      * so also match the CallStyle template, the callType extra and the known dialer packages.
      */
+    /** Known dialers + the phone's real default dialer + any package that looks like a dialer / in-call UI. */
+    private fun isDialerPkg(pkg: String): Boolean {
+        if (pkg in DIALERS) return true
+        val p = pkg.lowercase()
+        if (p.contains("incallui") || p.contains("dialer") || p.contains("telecom")) return true
+        val def = defaultDialer ?: runCatching {
+            getSystemService(TelecomManager::class.java)?.defaultDialerPackage
+        }.getOrNull().also { defaultDialer = it }
+        return def != null && pkg == def
+    }
+
+    private var defaultDialer: String? = null
+
     private fun isCall(sbn: StatusBarNotification): Boolean {
         val n = sbn.notification
         if (n.category == Notification.CATEGORY_CALL) return true
@@ -368,14 +384,26 @@ class IslandListener : NotificationListenerService() {
         if (ex.containsKey("android.callType")) return true
         if (ex.getString(Notification.EXTRA_TEMPLATE)?.contains("CallStyle") == true) return true
         // Dialer package: only live call notifications (ringing / ongoing), never "missed call" etc.
-        if (sbn.packageName in DIALERS) {
+        if (isDialerPkg(sbn.packageName)) {
             val hasCallAction = n.actions.orEmpty().any { a ->
                 titleHasWord(a.title, CALL_ACTION_WORDS)
             }
-            return sbn.isOngoing || n.fullScreenIntent != null || hasCallAction
+            // The phone is ringing / in a call right now. Some dialers (e.g. ColorOS) post a custom-view
+            // call notification with no CATEGORY_CALL, no callType and no titled actions.
+            return sbn.isOngoing || n.fullScreenIntent != null || hasCallAction || callAudioLive()
         }
         return false
     }
+
+    /** True while the phone is ringing or in a call (AudioManager mode). Needs no permission. */
+    private fun callAudioLive(): Boolean = runCatching {
+        val m = getSystemService(android.media.AudioManager::class.java)?.mode
+        m == android.media.AudioManager.MODE_RINGTONE || m == android.media.AudioManager.MODE_IN_CALL
+    }.getOrDefault(false)
+
+    private fun ringingNow(): Boolean = runCatching {
+        getSystemService(android.media.AudioManager::class.java)?.mode == android.media.AudioManager.MODE_RINGTONE
+    }.getOrDefault(false)
 
     /* ---------------- Clock app timer ---------------- */
 
@@ -533,7 +561,7 @@ class IslandListener : NotificationListenerService() {
             2 -> false
             // Older dialers: an Answer button or a full-screen ring = incoming.
             // While dialing out neither exists, so an outgoing call is no longer "Incoming".
-            else -> answer != null || (n.fullScreenIntent != null && !counting)
+            else -> answer != null || (n.fullScreenIntent != null && !counting) || (ringingNow() && !counting)
         }
 
         IslandController.setCall(name, incoming, answer, decline, key = sbn.key)
@@ -567,10 +595,48 @@ class IslandListener : NotificationListenerService() {
             "com.zeptoconsumerapp", "com.ubercab", "com.olacabs.customer", "com.rapido.passenger",
         )
         val DIALERS = setOf(
-            "com.android.incallui", "com.android.server.telecom", "com.android.dialer",
-            "com.google.android.dialer", "com.samsung.android.incallui",
-            "com.samsung.android.dialer", "com.oplus.dialer", "com.coloros.dialer",
-            "com.oneplus.dialer", "com.miui.voip",
+            // AOSP / Android system / Google
+            "com.android.incallui", "com.android.server.telecom", "com.android.phone",
+            "com.android.dialer", "com.android.contacts", "com.android.telephony",
+            "com.google.android.dialer", "com.google.android.apps.dialer",
+            "com.google.android.contacts", "com.android.services.telephony",
+            // Samsung
+            "com.samsung.android.incallui", "com.samsung.android.dialer",
+            "com.samsung.android.app.telephonyui", "com.samsung.android.contacts",
+            "com.samsung.android.callassistant", "com.samsung.android.phone",
+            // Xiaomi / Redmi / POCO (MIUI, HyperOS)
+            "com.miui.voip", "com.xiaomi.phone", "com.miui.contacts",
+            "com.miui.incallui", "com.xiaomi.simactivate.service",
+            // Oppo / Realme / OnePlus (ColorOS, OxygenOS, realme UI)
+            "com.oplus.dialer", "com.coloros.dialer", "com.oneplus.dialer",
+            "com.oplus.incallui", "com.coloros.incallui", "com.oneplus.incallui",
+            "com.oplus.telephony", "com.coloros.phone", "com.oneplus.contacts",
+            "com.coloros.contacts", "com.oplus.contacts",
+            // Vivo / iQOO (Funtouch, OriginOS)
+            "com.vivo.dialer", "com.vivo.incallui", "com.vivo.contacts",
+            "com.vivo.phone", "com.bbk.dialer", "com.bbk.incallui", "com.iqoo.dialer",
+            // Huawei / Honor (EMUI, MagicOS)
+            "com.huawei.contacts", "com.huawei.android.incallui", "com.huawei.phone",
+            "com.hihonor.contacts", "com.hihonor.incallui", "com.hihonor.dialer",
+            // Motorola / Lenovo
+            "com.motorola.dialer", "com.motorola.incallui", "com.motorola.contacts",
+            "com.lenovo.dialer", "com.lenovo.incallui",
+            // Nothing / CMF
+            "com.nothing.dialer", "com.nothing.incallui", "com.nothing.contacts",
+            // Asus / Sony / LG / HTC / Nokia (HMD) / ZTE / Meizu / Tecno-Infinix-itel / Lava / Micromax
+            "com.asus.contacts", "com.asus.incallui", "com.asus.dialer",
+            "com.sonyericsson.android.dialer", "com.sonymobile.dialer", "com.sonyericsson.android.incallui",
+            "com.lge.incallui", "com.lge.contacts", "com.lge.dialer",
+            "com.htc.contacts", "com.htc.incallui",
+            "com.hmdglobal.incallui", "com.hmdglobal.dialer", "com.nokia.incallui",
+            "com.zte.incallui", "com.zte.dialer", "com.meizu.incallui", "com.meizu.dialer",
+            "com.transsion.incallui", "com.transsion.dialer", "com.transsion.phonedialer",
+            "com.transsion.contacts", "com.itel.dialer", "com.tecno.dialer", "com.infinix.dialer",
+            "com.lava.dialer", "com.micromax.dialer", "com.gionee.dialer", "com.cloudminds.dialer",
+            // Third-party dialers
+            "com.truecaller", "com.simplemobiletools.dialer", "org.fossify.phone",
+            "com.contacts.phone.dialer", "com.drupe.swd", "com.hiya.stingray",
+            "com.mobile.dialer", "com.dialer.phone",
         )
     }
 }

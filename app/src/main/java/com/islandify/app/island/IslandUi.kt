@@ -52,6 +52,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -180,6 +181,7 @@ fun DynamicIslandUi(
     onOpenMedia: () -> Unit = {},
     secondary: IslandMode.Media? = null,   // music next to a timer / navigation
     queued: Int = 0,                       // banners waiting behind the current one
+    onSwipe: ((SwipeDir) -> Unit)? = null, // null = old behaviour (up = onDismiss, left / right = onSwipeSide)
 ) {
     val base = LocalDensity.current
     // Text size of this kind (banners scale their own text, cards / pills scale the font here)
@@ -193,7 +195,7 @@ fun DynamicIslandUi(
         IslandBody(
             mode, level, widthScale, heightScale, cornerFactor, animSpeed, glow, haptics,
             onClick, onLongPress, onDismiss, actions,
-            onSwipeSide, appAccent, secondary, queued
+            onSwipeSide, appAccent, secondary, queued, onSwipe
         )
     }
 }
@@ -216,6 +218,7 @@ private fun IslandBody(
     appAccent: Color?,
     secondary: IslandMode.Media?,
     queued: Int,
+    onSwipe: ((SwipeDir) -> Unit)?,
 ) {
     val lvl = level
     val kindStyles by IslandSettings.kindStyles.collectAsState()
@@ -232,6 +235,7 @@ private fun IslandBody(
     val dLong by rememberUpdatedState(onLongPress)
     val dDismiss by rememberUpdatedState(onDismiss)
     val dSide by rememberUpdatedState(onSwipeSide)
+    val dSwipe by rememberUpdatedState(onSwipe)
 
     // Light haptic on expand / collapse (not on the first composition)
     var firstLevel by remember { mutableStateOf(true) }
@@ -338,6 +342,8 @@ private fun IslandBody(
                     // Default requireUnconsumed = true: a touch that starts on an inner button
                     // (prev / play / next / answer...) belongs to that button, not to us.
                     val down = awaitFirstDown()
+                    val tracker = VelocityTracker()
+                    tracker.addPosition(down.uptimeMillis, down.position)
                     val slop = viewConfiguration.touchSlop
                     var accum = Offset.Zero
                     var swipe = false
@@ -356,6 +362,7 @@ private fun IslandBody(
                                 return@withTimeoutOrNull
                             }
                             accum += ch.positionChange()
+                            tracker.addPosition(ch.uptimeMillis, ch.position)
                             if (accum.getDistance() > slop) {
                                 swipe = true
                                 return@withTimeoutOrNull
@@ -377,11 +384,28 @@ private fun IslandBody(
                             val d = ch.positionChange()
                             dx += d.x
                             dy += d.y
+                            tracker.addPosition(ch.uptimeMillis, ch.position)
                             ch.consume()
                         }
                         currentEvent.changes.forEach { it.consume() }
-                        if (dy < -18.dp.toPx() && abs(dy) > abs(dx)) dDismiss()
-                        else if (abs(dx) > 24.dp.toPx() && abs(dx) > abs(dy)) dSide(if (dx < 0) 1 else -1)
+                        // FIX: the old rule needed a long drag (18dp, and it shrank with the island scale).
+                        // Now a short quick flick counts too, and the distance is not tied to the scale.
+                        val velo = tracker.calculateVelocity()
+                        val vertical = abs(dy) >= abs(dx)
+                        val dist = if (vertical) abs(dy) else abs(dx)
+                        val speed = if (vertical) abs(velo.y) else abs(velo.x)
+                        if (dist >= slop * 2f || speed >= 500f) {
+                            val dir = if (vertical) (if (dy < 0) SwipeDir.Up else SwipeDir.Down)
+                                      else (if (dx < 0) SwipeDir.Left else SwipeDir.Right)
+                            val cb = dSwipe
+                            if (cb != null) cb(dir)
+                            else when (dir) {
+                                SwipeDir.Up -> dDismiss()
+                                SwipeDir.Left -> dSide(1)
+                                SwipeDir.Right -> dSide(-1)
+                                SwipeDir.Down -> Unit
+                            }
+                        }
                     } else if (tap) {
                         dClick()
                     }

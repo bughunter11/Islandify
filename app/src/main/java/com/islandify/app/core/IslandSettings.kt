@@ -96,6 +96,25 @@ fun kindOf(m: IslandMode): IslandKind? = when (m) {
  *  - corner       : 0.2 = less round, 1.0 = full pill
  *  - animSpeed    : spring speed (0.5 slow .. 2 fast)
  */
+/** Direction of a swipe on the island. */
+enum class SwipeDir { Up, Down, Left, Right }
+
+/** What a swipe can do. The user picks one per direction in Customize > Swipe gestures. */
+enum class SwipeAction(val key: String, @StringRes val label: Int) {
+    None("none", R.string.swipe_act_none),
+    Dismiss("dismiss", R.string.swipe_act_dismiss),          // collapse, then hide
+    ClearAll("clear", R.string.swipe_act_clear),             // dismiss + drop every waiting pop-up
+    Expand("expand", R.string.swipe_act_expand),             // pill -> card
+    OpenApp("open", R.string.swipe_act_open),                // open the app the island is showing
+    NextTrack("next", R.string.swipe_act_next),
+    PrevTrack("prev", R.string.swipe_act_prev),
+    PlayPause("playpause", R.string.swipe_act_playpause);
+
+    companion object {
+        fun from(key: String?, def: SwipeAction) = entries.firstOrNull { it.key == key } ?: def
+    }
+}
+
 object IslandSettings {
     private var prefs: SharedPreferences? = null
 
@@ -126,6 +145,18 @@ object IslandSettings {
     val autoCollapseSec = MutableStateFlow(6)                    // expanded card collapses by itself (0 = never)
     val idlePill = MutableStateFlow(true)                        // small pill stays on screen when idle (tap = time / date / battery)
     val swipeSkip = MutableStateFlow(true)                       // swipe left/right on the island to skip tracks
+    val stickyNotif = MutableStateFlow(false)                    // notifications stay on the island until tapped / swiped away
+    val swipeUp = MutableStateFlow(SwipeAction.Dismiss)
+    val swipeDown = MutableStateFlow(SwipeAction.None)
+    val swipeLeft = MutableStateFlow(SwipeAction.NextTrack)
+    val swipeRight = MutableStateFlow(SwipeAction.PrevTrack)
+
+    fun swipeFlow(d: SwipeDir) = when (d) {
+        SwipeDir.Up -> swipeUp
+        SwipeDir.Down -> swipeDown
+        SwipeDir.Left -> swipeLeft
+        SwipeDir.Right -> swipeRight
+    }
 
     val onboarded = MutableStateFlow(false)  // has the setup screen been completed once?
     val enabled = MutableStateFlow(true)     // has the user left the island switched on?
@@ -171,6 +202,16 @@ object IslandSettings {
         islandAppAccent.value = p.getBoolean("islandAppAccent", false)
         autoCollapseSec.value = p.getInt("autoCollapse", 6)
         swipeSkip.value = p.getBoolean("swipeSkip", true)
+        stickyNotif.value = p.getBoolean("stickyNotif", false)
+        swipeUp.value = SwipeAction.from(p.getString("swipeUp", null), SwipeAction.Dismiss)
+        swipeDown.value = SwipeAction.from(p.getString("swipeDown", null), SwipeAction.None)
+        swipeLeft.value = SwipeAction.from(p.getString("swipeLeft", null), SwipeAction.NextTrack)
+        swipeRight.value = SwipeAction.from(p.getString("swipeRight", null), SwipeAction.PrevTrack)
+        // Old "Swipe to skip tracks" switch was OFF: keep left / right off
+        if (!p.contains("swipeLeft") && !swipeSkip.value) {
+            swipeLeft.value = SwipeAction.None
+            swipeRight.value = SwipeAction.None
+        }
         idlePill.value = p.getBoolean("idlePill", true)
         onboarded.value = p.getBoolean("onboarded", false)
         enabled.value = p.getBoolean("enabled", true)
@@ -198,6 +239,11 @@ object IslandSettings {
             ?.putBoolean("islandAppAccent", islandAppAccent.value)
             ?.putInt("autoCollapse", autoCollapseSec.value)
             ?.putBoolean("swipeSkip", swipeSkip.value)
+            ?.putBoolean("stickyNotif", stickyNotif.value)
+            ?.putString("swipeUp", swipeUp.value.key)
+            ?.putString("swipeDown", swipeDown.value.key)
+            ?.putString("swipeLeft", swipeLeft.value.key)
+            ?.putString("swipeRight", swipeRight.value.key)
             ?.putBoolean("idlePill", idlePill.value)
             ?.putBoolean("onboarded", onboarded.value)
             ?.putBoolean("enabled", enabled.value)
@@ -274,6 +320,11 @@ object IslandSettings {
         resetLook()
         autoCollapseSec.value = 6
         swipeSkip.value = true
+        stickyNotif.value = false
+        swipeUp.value = SwipeAction.Dismiss
+        swipeDown.value = SwipeAction.None
+        swipeLeft.value = SwipeAction.NextTrack
+        swipeRight.value = SwipeAction.PrevTrack
         idlePill.value = true
         islandAppAccent.value = false
         theme.value = 0

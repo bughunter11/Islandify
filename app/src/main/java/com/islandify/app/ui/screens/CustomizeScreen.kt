@@ -34,6 +34,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,7 +55,11 @@ fun CustomizeScreen() {
     val bgColor by IslandSettings.bgColor.collectAsState()
     val appAccent by IslandSettings.islandAppAccent.collectAsState()
     val collapse by IslandSettings.autoCollapseSec.collectAsState()
-    val swipeSkip by IslandSettings.swipeSkip.collectAsState()
+    val swUp by IslandSettings.swipeUp.collectAsState()
+    val swDown by IslandSettings.swipeDown.collectAsState()
+    val swLeft by IslandSettings.swipeLeft.collectAsState()
+    val swRight by IslandSettings.swipeRight.collectAsState()
+    val stickyNotif by IslandSettings.stickyNotif.collectAsState()
     val idlePill by IslandSettings.idlePill.collectAsState()
     val dynamicOk = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -163,14 +168,35 @@ fun CustomizeScreen() {
                 checked = idlePill, onChange = { IslandSettings.idlePill.value = it; IslandSettings.save() }
             )
             ToggleRow(
-                icon = Icons.Rounded.SkipNext, title = stringResource(R.string.cust_swipe_skip),
-                subtitle = stringResource(R.string.cust_swipe_skip_sub),
-                checked = swipeSkip, onChange = { IslandSettings.swipeSkip.value = it; IslandSettings.save() }
+                icon = Icons.Rounded.PushPin, title = stringResource(R.string.cust_sticky_notif),
+                subtitle = stringResource(R.string.cust_sticky_notif_sub),
+                checked = stickyNotif, onChange = { IslandSettings.stickyNotif.value = it; IslandSettings.save() }
             )
             ToggleRow(
                 icon = Icons.Rounded.Palette, title = stringResource(R.string.cust_app_accent),
                 subtitle = stringResource(R.string.cust_app_accent_sub),
                 checked = appAccent, onChange = { IslandSettings.islandAppAccent.value = it; IslandSettings.save() }
+            )
+        }
+
+        /* ---------- Swipe gestures ---------- */
+        SectionCard(title = stringResource(R.string.cust_swipe_title), icon = Icons.Rounded.TouchApp) {
+            SwipeActionRow(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.cust_swipe_up), swUp) {
+                IslandSettings.swipeUp.value = it; IslandSettings.save()
+            }
+            SwipeActionRow(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.cust_swipe_down), swDown) {
+                IslandSettings.swipeDown.value = it; IslandSettings.save()
+            }
+            SwipeActionRow(Icons.Rounded.SwapHoriz, stringResource(R.string.cust_swipe_left), swLeft) {
+                IslandSettings.swipeLeft.value = it; IslandSettings.save()
+            }
+            SwipeActionRow(Icons.Rounded.SwapHoriz, stringResource(R.string.cust_swipe_right), swRight) {
+                IslandSettings.swipeRight.value = it; IslandSettings.save()
+            }
+            Text(
+                stringResource(R.string.cust_swipe_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -322,4 +348,30 @@ private fun ColorDot(argb: Int, selected: Boolean, onClick: () -> Unit) {
             .border(3.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = ring), CircleShape)
             .clickable(onClick = onClick)
     )
+}
+
+
+/** One row: icon, direction name and a dropdown with the action for that swipe. */
+@Composable
+private fun SwipeActionRow(icon: ImageVector, title: String, value: SwipeAction, onPick: (SwipeAction) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(12.dp))
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Box {
+            TextButton(onClick = { open = true }) {
+                Text(stringResource(value.label), maxLines = 1)
+                Icon(Icons.Rounded.ArrowDropDown, null)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                SwipeAction.entries.forEach { a ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(a.label)) },
+                        onClick = { onPick(a); open = false }
+                    )
+                }
+            }
+        }
+    }
 }

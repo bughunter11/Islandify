@@ -184,6 +184,8 @@
     <string name="cust_seconds">%1$d s</string>
     <string name="cust_idle_pill">Always show idle pill</string>
     <string name="cust_idle_pill_sub">Small pill stays on screen; tap it for time, date and battery</string>
+    <string name="cust_sticky_notif">Keep notifications until dismissed</string>
+    <string name="cust_sticky_notif_sub">A notification shrinks to the small pill after a few seconds and stays there until you tap it, swipe it up, reply or mark it as read</string>
     <string name="cust_swipe_skip">Swipe to skip tracks</string>
     <string name="cust_swipe_skip_sub">Swipe the island left for next, right for previous</string>
     <string name="cust_app_accent">Island uses app accent</string>
@@ -214,4 +216,18 @@
     <string name="test_group_live">Live activities</string>
     <string name="test_group_combo">Combos</string>
     <string name="lang_title">Language</string>
+    <string name="cust_swipe_title">Swipe gestures</string>
+    <string name="cust_swipe_up">Swipe up</string>
+    <string name="cust_swipe_down">Swipe down</string>
+    <string name="cust_swipe_left">Swipe left</string>
+    <string name="cust_swipe_right">Swipe right</string>
+    <string name="cust_swipe_hint">Choose what each swipe does. Music actions work only while music is on the island.</string>
+    <string name="swipe_act_none">Do nothing</string>
+    <string name="swipe_act_dismiss">Dismiss / hide</string>
+    <string name="swipe_act_clear">Clear all pop-ups</string>
+    <string name="swipe_act_expand">Open card</string>
+    <string name="swipe_act_open">Open the app</string>
+    <string name="swipe_act_next">Next track</string>
+    <string name="swipe_act_prev">Previous track</string>
+    <string name="swipe_act_playpause">Play / pause</string>
 </resources>
