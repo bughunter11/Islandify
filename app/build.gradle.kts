@@ -18,13 +18,29 @@ android {
 
     buildFeatures { compose = true }
 
+    val props = java.util.Properties()
+    val propsFile = rootProject.file("keystore.properties")
+    val hasKeystore = propsFile.exists()
+    if (hasKeystore) props.load(propsFile.inputStream())
+
+    signingConfigs {
+        if (hasKeystore) {
+            create("release") {
+                storeFile = file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+
     // Install THIS (release) build for real speed. Debug builds are 3-5x slower in Compose.
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            signingConfig = signingConfigs.getByName("debug")   // so it installs without a keystore
+            signingConfig = if (hasKeystore) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 

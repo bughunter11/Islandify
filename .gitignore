@@ -18,3 +18,5 @@ upload_to_github.sh
 *.aab
 project_dump.txt
 project_dump.txt
+keystore.properties
+*.jks
