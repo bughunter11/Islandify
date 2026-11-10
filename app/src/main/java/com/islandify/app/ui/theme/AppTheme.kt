@@ -82,5 +82,5 @@ fun AppTheme(content: @Composable () -> Unit) {
             w.decorView.setBackgroundColor(scheme.background.toArgb())
         }
     }
-    MaterialTheme(colorScheme = scheme, content = content)
+    MaterialTheme(colorScheme = scheme, typography = com.islandify.app.ui.theme.appTypography(), content = content)   // FONTNEON
 }

@@ -1,0 +1,17 @@
+# Islandify baseline profile (wildcard rules)
+# profileinstaller (already in build.gradle.kts) pre-compiles these at install time.
+HSPLcom/islandify/app/**;->**(**)**
+Lcom/islandify/app/**;
+HSPLandroidx/compose/runtime/**;->**(**)**
+HSPLandroidx/compose/ui/**;->**(**)**
+HSPLandroidx/compose/foundation/**;->**(**)**
+HSPLandroidx/compose/animation/**;->**(**)**
+HSPLandroidx/compose/material3/**;->**(**)**
+HSPLandroidx/compose/material/ripple/**;->**(**)**
+HSPLandroidx/lifecycle/**;->**(**)**
+HSPLandroidx/activity/**;->**(**)**
+Landroidx/compose/runtime/**;
+Landroidx/compose/ui/**;
+Landroidx/compose/foundation/**;
+Landroidx/compose/animation/**;
+Landroidx/compose/material3/**;

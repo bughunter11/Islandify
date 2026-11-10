@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -11,14 +13,14 @@ android {
     defaultConfig {
         applicationId = "com.islandify.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 2
-        versionName = "1.2"
+        targetSdk = 34   // TARGETSDK34: edge-to-edge default warning hataane ke liye
+        versionCode = 7   // VERSION16 (1.5 was versionCode 6)
+        versionName = "1.6"
     }
 
     buildFeatures { compose = true }
 
-    val props = java.util.Properties()
+    val props = Properties()
     val propsFile = rootProject.file("keystore.properties")
     val hasKeystore = propsFile.exists()
     if (hasKeystore) props.load(propsFile.inputStream())
@@ -73,4 +75,23 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.8.7")
     implementation("androidx.savedstate:savedstate-ktx:1.2.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("androidx.media:media:1.7.0")   // MediaControllerCompat: shuffle / repeat control
+    testImplementation("junit:junit:4.13.2")   // PATCHKIT15B: unit tests
+}
+
+// PATCHKIT15B-SIGN: release APK kabhi debug key se sign na ho.
+// Warna in-app update purane users par "App not installed" deta hai (signature alag).
+// Override sirf test ke liye: ./gradlew assembleRelease -PallowDebugRelease
+gradle.taskGraph.whenReady {
+    val ks = rootProject.file("keystore.properties")
+    val releaseBuild = allTasks.any { t ->
+        t.project == project &&
+            (t.name == "assembleRelease" || t.name == "bundleRelease" || t.name == "packageRelease")
+    }
+    if (releaseBuild && !ks.exists() && !project.hasProperty("allowDebugRelease")) {
+        throw GradleException(
+            "keystore.properties not found: refusing to sign a RELEASE build with the debug key. " +
+                "Add keystore.properties, or pass -PallowDebugRelease to override."
+        )
+    }
 }

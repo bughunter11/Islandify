@@ -6,6 +6,7 @@ import androidx.annotation.StringRes
 import com.islandify.app.core.*
 import com.islandify.app.island.*
 import com.islandify.app.ui.components.*
+import com.islandify.app.update.UpdateAboutCard
 
 import android.content.Intent
 import android.content.pm.PackageInfo
@@ -50,6 +51,16 @@ private val GESTURES = listOf(
     Gesture(Icons.Rounded.ZoomOutMap, R.string.gesture_long, R.string.gesture_long_res),
     Gesture(Icons.Rounded.SwapHoriz, R.string.gesture_swipe_lr, R.string.gesture_swipe_lr_res),
     Gesture(Icons.Rounded.KeyboardArrowUp, R.string.gesture_swipe_up, R.string.gesture_swipe_up_res),
+    Gesture(Icons.Rounded.ChatBubble, R.string.gesture_bubble, R.string.gesture_bubble_res),   // ABOUTKIT
+)
+
+/** ABOUTKIT: app kya kya karta hai (Gesture class hi dobara: icon + title + line). */
+private val FEATURES = listOf(
+    Gesture(Icons.Rounded.Home, R.string.feat_home, R.string.feat_home_res),
+    Gesture(Icons.Rounded.Call, R.string.feat_calls, R.string.feat_calls_res),
+    Gesture(Icons.Rounded.ChatBubble, R.string.feat_bubbles, R.string.feat_bubbles_res),
+    Gesture(Icons.Rounded.MusicNote, R.string.feat_music, R.string.feat_music_res),
+    Gesture(Icons.Rounded.Tune, R.string.feat_custom, R.string.feat_custom_res),
 )
 
 /** One permission = one row. [fix] opens the right settings screen. */
@@ -110,6 +121,9 @@ fun AboutScreen(tick: Int) {
             InfoRow(stringResource(R.string.about_island), stringResource(if (running) R.string.about_running else R.string.common_off))
         }
 
+        UpdateAboutCard()   // UPDATEKIT
+        DebugInfoCard()   // DEBUGKIT
+
         SectionCard(title = stringResource(R.string.about_developer), icon = Icons.Rounded.Code) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(
@@ -135,7 +149,10 @@ fun AboutScreen(tick: Int) {
             }
             LinkRow(Icons.AutoMirrored.Rounded.Send, "Telegram", "https://t.me/zyronix01")
             LinkRow(Icons.Rounded.Code, "GitHub", "https://github.com/bughunter11")
+            SupportRow()
         }
+
+        FeedbackCard()   // FEEDBACKKIT
 
         SectionCard(title = stringResource(R.string.about_setup_title), icon = Icons.Rounded.CheckCircle) {
             Text(
@@ -143,6 +160,11 @@ fun AboutScreen(tick: Int) {
                 style = MaterialTheme.typography.bodyMedium
             )
             statuses.forEach { s -> PermRow(s.icon, stringResource(s.title), s.ok, s.fix) }
+        }
+
+        // ABOUTKIT
+        SectionCard(title = stringResource(R.string.about_features), icon = Icons.Rounded.AutoAwesome) {
+            FEATURES.forEach { g -> GestureRow(g) }
         }
 
         SectionCard(title = stringResource(R.string.about_gestures), icon = Icons.Rounded.TouchApp) {
@@ -292,5 +314,47 @@ private fun AboutHero() {
                 }
             }
         }
+    }
+}
+
+// ---- Support (UPI) ----
+private const val SUPPORT_UPI_ID = "zyron0@ptyes"
+private const val SUPPORT_NAME = "Raj"
+
+/** Tap par UPI app chooser khulta hai. Koi UPI app na ho to ID copy ho jati hai. */
+@Composable
+private fun SupportRow() {
+    val ctx = LocalContext.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { openUpi(ctx) }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Rounded.Favorite, null, Modifier.size(22.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(
+            "Support",
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium
+        )
+        Icon(
+            Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun openUpi(ctx: android.content.Context) {
+    val uri = Uri.parse("upi://pay?pa=$SUPPORT_UPI_ID&pn=${Uri.encode(SUPPORT_NAME)}&cu=INR")
+    val intent = Intent.createChooser(Intent(Intent.ACTION_VIEW, uri), "Support with")
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { ctx.startActivity(intent) }.onFailure {
+        val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("UPI", SUPPORT_UPI_ID))
+        android.widget.Toast.makeText(ctx, "UPI ID copied: $SUPPORT_UPI_ID", android.widget.Toast.LENGTH_LONG).show()
     }
 }

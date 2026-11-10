@@ -48,6 +48,7 @@ class IslandService : Service() {
                 if (a11y || !Perms.overlay(this@IslandService)) o.hide() else o.show()
             }
         }
+
         running.value = true
     }
 

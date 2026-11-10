@@ -1,0 +1,197 @@
+package com.islandify.app.ui.screens
+
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.BorderOuter
+import androidx.compose.material.icons.rounded.CameraFront
+import androidx.compose.material.icons.rounded.CenterFocusStrong
+import androidx.compose.material.icons.rounded.ColorLens
+import androidx.compose.material.icons.rounded.CropFree
+import androidx.compose.material.icons.automirrored.rounded.EventNote
+import androidx.compose.material.icons.rounded.FlashlightOn
+import androidx.compose.material.icons.rounded.Height
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.OpenWith
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material.icons.rounded.Swipe
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material.icons.rounded.ViewAgenda
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.Wallpaper
+import androidx.compose.material.icons.rounded.Widgets
+import androidx.compose.material.icons.rounded.LowPriority
+import androidx.compose.material.icons.rounded.RoundedCorner
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.islandify.app.R
+import com.islandify.app.core.AppLanguage
+import com.islandify.app.core.IslandSettings
+import com.islandify.app.core.SwipeAction
+import com.islandify.app.core.SwipeDir
+import com.islandify.app.island.BubbleStore
+import com.islandify.app.core.IslandKind
+import com.islandify.app.core.KindStyle
+import com.islandify.app.ui.components.AppearIn
+import com.islandify.app.ui.components.CenteredSettingSlider
+import com.islandify.app.ui.components.PreviewCard
+import com.islandify.app.ui.components.SectionCard
+import com.islandify.app.ui.components.SettingSlider
+import com.islandify.app.ui.components.ToggleRow
+import com.islandify.app.ui.theme.AccentPresets
+import com.islandify.app.ui.theme.ThemeMode
+import com.islandify.app.ui.theme.hueOf
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+/* ============================== PAGE FRAME ============================== */
+
+// SPLITUI  (Banner page + previewOwner.)
+
+internal tailrec fun android.content.Context.previewOwner(): androidx.lifecycle.LifecycleOwner? = when (this) {
+    is androidx.lifecycle.LifecycleOwner -> this
+    is android.content.ContextWrapper -> baseContext.previewOwner()
+    else -> null
+}
+
+@Composable
+internal fun BannerPage() {
+    SectionCard(title = stringResource(R.string.cust_bn_look), icon = Icons.Rounded.AspectRatio) {
+        StylePickerRow(R.string.cust_style_banner, IslandSettings.bannerStyle, SHELL_STYLE_LABELS, 0)   // STYLEKIT
+        FloatSetting(R.string.cust_bn_width, Icons.Rounded.SwapHoriz, IslandSettings.bannerW, 0.6f..1.5f, 1f, ::pct)
+        FloatSetting(R.string.cust_bn_height, Icons.Rounded.Height, IslandSettings.bannerH, 0.8f..1.5f, 1f, ::pct)
+        FloatSetting(R.string.cust_bn_y, Icons.Rounded.SwapVert, IslandSettings.bannerY, -40f..100f, 0f) { "${it.roundToInt()} dp" }   // BANNERY
+        FloatSetting(R.string.cust_bn_corner, Icons.Rounded.RoundedCorner, IslandSettings.bannerCorner, 0f..1f, null) {
+            if (it < 0.2f) "Auto" else pct(it)
+        }
+        FloatSetting(R.string.cust_bn_text, Icons.Rounded.TextFields, IslandSettings.bannerText, 0.7f..1.5f, 1f, ::pct)
+        FloatSetting(R.string.cust_bn_alpha, Icons.Rounded.Visibility, IslandSettings.bannerAlpha, 0.4f..1f, null, ::pct)
+        FloatSetting(R.string.cust_bn_accent, Icons.Rounded.ColorLens, IslandSettings.bannerAccent, 0f..1.5f, 1f, ::pct)
+    }
+    SectionCard(title = stringResource(R.string.cust_bn_content), icon = Icons.Rounded.ViewAgenda) {
+        FlagRow(Icons.Rounded.ViewAgenda, R.string.cust_bn_sub, IslandSettings.bannerSub, R.string.cust_bn_sub_sub)
+        FlagRow(Icons.Rounded.TouchApp, R.string.cust_bn_badge, IslandSettings.bannerBadge, R.string.cust_bn_badge_sub)
+        FlagRow(Icons.Rounded.Visibility, R.string.cust_privacy_banners, IslandSettings.privacyBanners, R.string.cust_privacy_banners_sub)   // MOVEKIT (Pill > Advanced se aaya)
+    }
+
+    // MOVEKIT: har banner type (message, charging, low battery, toggles...) ka apna size / text / corner / show time
+    KindSection(R.string.cust_bn_kinds, Icons.Rounded.Widgets, R.string.cust_bn_kinds_sub, POPUP_KINDS) { st, edit ->
+        KindSlider(R.string.cust_banner_width, Icons.Rounded.SwapHoriz, st.w, 0.6f..1.6f, 1f, ::pct) { edit(st.copy(w = it)) }
+        KindSlider(R.string.cust_banner_height, Icons.Rounded.Height, st.h, 0.6f..1.6f, 1f, ::pct) { edit(st.copy(h = it)) }
+        KindSlider(R.string.cust_kind_y, Icons.Rounded.SwapVert, st.y, -40f..100f, 0f, { "${it.roundToInt()} dp" }) { edit(st.copy(y = it)) }
+        KindSlider(R.string.cust_banner_text, Icons.Rounded.TextFields, st.text, 0.7f..1.5f, 1f, ::pct) { edit(st.copy(text = it)) }
+        ToggleRow(
+            icon = Icons.Rounded.RoundedCorner,
+            title = stringResource(R.string.cust_corner_follow),
+            checked = st.corner < 0f,
+            onChange = { follow ->
+                edit(st.copy(corner = if (follow) -1f else IslandSettings.corner.value))
+                IslandSettings.save()
+            }
+        )
+        if (st.corner >= 0f) AppearIn {
+            KindSlider(R.string.cust_roundness, Icons.Rounded.RoundedCorner, st.corner, 0.2f..1f, null, ::pct) {
+                edit(st.copy(corner = it))
+            }
+        }
+        val sec = st.durationSec
+        SettingSlider(
+            stringResource(R.string.cust_show_time), Icons.Rounded.Schedule,
+            if (sec == 0) stringResource(R.string.cust_auto) else stringResource(R.string.cust_seconds, sec),
+            sec.toFloat(), 0f..15f,
+            { edit(st.copy(durationSec = it.roundToInt())) },
+            { IslandSettings.save() }
+        )
+        Text(stringResource(R.string.cust_show_time_sub), style = MaterialTheme.typography.bodySmall)   // REVIVEKIT
+    }
+}

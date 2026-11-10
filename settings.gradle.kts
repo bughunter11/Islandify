@@ -13,3 +13,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Islandify"
 include(":app")
+

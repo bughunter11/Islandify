@@ -30,9 +30,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
@@ -108,7 +106,7 @@ fun HomeScreen(tick: Int) {
                 Spacer(Modifier.width(14.dp))
                 AnimatedContent(
                     targetState = running,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).padding(end = 12.dp),   // UIPOLISH
                     transitionSpec = {
                         (fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 3 })
                             .togetherWith(fadeOut(tween(120)) + slideOutVertically(tween(160)) { -it / 3 })
@@ -149,97 +147,14 @@ fun HomeScreen(tick: Int) {
                 Text(
                     stringResource(R.string.home_taps_hint),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onErrorContainer   // UIPOLISH
                 )
             }
         }
 
         PreviewCard(scale, w, h)
-
-        /* ---------- Test ---------- */
-        SectionCard(title = stringResource(R.string.home_test_title), icon = Icons.Rounded.AutoAwesome) {
-            // Grouped, two equal-width columns: tidy rows instead of chips scattered by their own width
-            TestGroup(R.string.test_group_basic, listOf(
-                TestAction(R.string.demo_message, Icons.AutoMirrored.Rounded.Chat) {
-                    IslandController.flash(
-                        IslandMode.Notification("WhatsApp", "Rahul", "Is tomorrow's plan final? Let's leave at 10 AM.")
-                    )
-                },
-                TestAction(R.string.demo_charging, Icons.Rounded.Bolt) {
-                    IslandController.flash(IslandMode.Charging(82))
-                },
-                TestAction(R.string.test_timer_60, Icons.Rounded.Timer) {
-                    IslandController.startTimer(60)
-                },
-                TestAction(R.string.demo_music, Icons.Rounded.MusicNote) {
-                    IslandController.setMedia(IslandMode.Media("Blinding Lights", "The Weeknd", true))
-                },
-                TestAction(R.string.demo_call, Icons.Rounded.Call) {
-                    IslandController.setCall("Mummy", true, null, null, canAnswer = true)
-                },
-                TestAction(R.string.test_end_call, Icons.Rounded.CallEnd) {
-                    IslandController.clearCall()
-                },
-                TestAction(R.string.demo_earbuds, Icons.Rounded.Headphones) {
-                    IslandController.flash(IslandMode.Device("AirPods Pro", true), 3500)
-                },
-                TestAction(R.string.trigger_battery, Icons.Rounded.BatteryAlert) {
-                    IslandController.flash(IslandMode.LowBattery(15), 5000)
-                },
-                TestAction(R.string.test_silent, Icons.AutoMirrored.Rounded.VolumeOff) {
-                    IslandController.flash(IslandMode.Toggle(ToggleKind.Silent, true), 2500)
-                },
-                TestAction(R.string.test_flashlight, Icons.Rounded.FlashOn) {
-                    IslandController.flash(IslandMode.Toggle(ToggleKind.Flashlight, true), 2500)
-                },
-            ))
-            TestGroup(R.string.test_group_live, listOf(
-                TestAction(R.string.trigger_navigation, Icons.Rounded.Navigation) {
-                    IslandController.setLive(
-                        IslandMode.Live(LiveKind.Navigation, "Maps", "Turn left onto MG Road", "12 min, 4.2 km"),
-                        "demo", null, null
-                    )
-                },
-                TestAction(R.string.test_food_order, Icons.Rounded.DeliveryDining) {
-                    IslandController.setLive(
-                        IslandMode.Live(LiveKind.Tracking, "Zomato", "Order on the way", "Arriving in 12 min"),
-                        "demo", null, null
-                    )
-                },
-                TestAction(R.string.trigger_downloads, Icons.Rounded.Download) {
-                    IslandController.setDownload(
-                        IslandMode.Live(LiveKind.Download, "Chrome", "movie.mp4", "45 MB of 120 MB", 38),
-                        "demo-dl", null, null
-                    )
-                },
-                TestAction(R.string.test_clear_live, Icons.Rounded.Close) {
-                    IslandController.clearLive()
-                    IslandController.clearDownload()
-                },
-            ))
-            TestGroup(R.string.test_group_combo, listOf(
-                TestAction(R.string.test_three_messages, Icons.AutoMirrored.Rounded.Chat) {
-                    IslandController.flash(IslandMode.Notification("WhatsApp", "Rahul", "Is tomorrow's plan final?"))
-                    IslandController.flash(IslandMode.Notification("WhatsApp", "Priya", "Call me when you are free"))
-                    IslandController.flash(IslandMode.Notification("Messages", "Mummy", "Dinner at 8"))
-                },
-                TestAction(R.string.test_nav_music, Icons.Rounded.Navigation) {
-                    IslandController.setMedia(IslandMode.Media("Blinding Lights", "The Weeknd", true))
-                    IslandController.setLive(
-                        IslandMode.Live(LiveKind.Navigation, "Maps", "Turn left onto MG Road", "12 min, 4.2 km"),
-                        "demo", null, null
-                    )
-                },
-                TestAction(R.string.test_clear_music, Icons.Rounded.Close) {
-                    IslandController.setMedia(null)
-                },
-            ))
-            Text(
-                stringResource(R.string.home_test_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        HomeQuickCard()   // HOMEKIT
+        HomeTestCard()    // HOMEKIT
 
         /* ---------- Optional permissions still missing ---------- */
         if (!btOk || !batteryOk) {
@@ -258,28 +173,6 @@ fun HomeScreen(tick: Int) {
                         Perms.openBatterySettings(ctx)
                     }
                 }
-            }
-        }
-    }
-}
-
-private class TestAction(@StringRes val label: Int, val icon: ImageVector, val run: () -> Unit)
-
-/** A small caption and the actions in rows of two equal-width chips. */
-@Composable
-private fun TestGroup(@StringRes title: Int, actions: List<TestAction>) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(
-            stringResource(title),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
-        actions.chunked(2).forEach { pair ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                pair.forEach { a ->
-                    BouncyChip(stringResource(a.label), a.icon, Modifier.weight(1f), a.run)
-                }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }

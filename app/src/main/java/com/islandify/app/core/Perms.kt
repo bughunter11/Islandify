@@ -58,11 +58,6 @@ object Perms {
      */
     fun coreOk(c: Context) = (accessibility(c) || overlay(c)) && listener(c) && post(c)
 
-    fun openOverlaySettings(c: Context) = go(c, 
-        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${c.packageName}"))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    )
-
     fun openAccessibilitySettings(c: Context) = go(c, 
         Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     )

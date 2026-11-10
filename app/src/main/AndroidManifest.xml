@@ -9,14 +9,30 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- CALLCTL: island se call uthana / kaatna (Telecom fallback) -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <!-- Lets the Apps tab list apps that have no launcher icon, so they can be blocked too -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Wi-Fi connect / disconnect pop-up -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.DETECT_SCREEN_RECORDING" />
+    <!-- Optional: next calendar event on the idle card (asked only when you switch it on) -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.INTERNET" />   <!-- WEATHERKIT + UPDATEKIT -->
+    <!-- UPDATEKIT: in-app update (check GitHub Releases, download the APK, open the installer) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />   <!-- WEATHERKIT -->
 
     <!-- Launcher apps must be visible to list apps and open media apps (Android 11+) -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
         </intent>
     </queries>
 
@@ -70,5 +86,29 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_config" />
         </service>
+
+        <!-- TILEKIT: Quick Settings tile (island on / off) -->
+        <service
+            android:name=".island.IslandTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_islandify"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- UPDATEKIT: lets the system installer read the downloaded update APK -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_paths" />
+        </provider>
     </application>
 </manifest>
+

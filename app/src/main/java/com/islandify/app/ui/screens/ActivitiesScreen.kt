@@ -37,6 +37,7 @@ fun ActivitiesScreen() {
                 }
             }
         }
+        CallPermRow()   // CALLCTL
         Text(
             stringResource(R.string.act_footer),
             style = MaterialTheme.typography.bodySmall,

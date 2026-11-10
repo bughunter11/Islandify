@@ -44,7 +44,20 @@ class IslandA11yService : AccessibilityService() {
         }
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // Only the package name of a newly opened window is used. No screen content is read.
+        if (event == null || event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val pkg = event.packageName?.toString() ?: return
+        if (pkg == packageName || pkg == "com.android.systemui" ||
+            pkg == IslandVisibility.foreground.value || isKeyboard(pkg)) return   // BUTTERA11Y
+        IslandVisibility.foreground.value = pkg
+    }
+
+    private fun isKeyboard(pkg: String): Boolean = runCatching {
+        android.provider.Settings.Secure.getString(
+            contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD
+        )?.startsWith("$pkg/") == true
+    }.getOrDefault(false)
 
     override fun onInterrupt() = Unit
 

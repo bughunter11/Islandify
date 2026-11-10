@@ -1,4 +1,5 @@
 package com.islandify.app.ui.screens
+import androidx.compose.material.icons.rounded.Tune
 import com.islandify.app.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,12 +41,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -143,6 +142,11 @@ fun AppsScreen() {
         base?.filter { it.label.contains(query.trim(), ignoreCase = true) }
     }
 
+    // APPSTYLEKIT (PATCH_10_11_12): har app ka accent + show time
+    val styles by AppStyles.map.collectAsState()
+    var styleApp by remember { mutableStateOf<AppItem?>(null) }
+    styleApp?.let { a -> AppStyleDialog(a.pkg, a.label) { styleApp = null } }
+
     val listState = rememberLazyListState()
     val scrolled by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 6 }
@@ -209,15 +213,43 @@ fun AppsScreen() {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                    if (shown.orEmpty().isEmpty()) item(key = "empty") {   // UIPOLISH
+                        Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                stringResource(R.string.apps_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     items(shown.orEmpty(), key = { it.pkg }) { app ->
                         val on = app.pkg !in blocked
                         // Blocked apps fade out a little, rows slide when the search filters the list
                         val rowAlpha = if (on) 1f else 0.5f
+                        val styled = styles.containsKey(app.pkg)
+                        val styledLine: @Composable () -> Unit = {
+                            Text(
+                                stringResource(R.string.app_style_custom),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                         ListItem(
                             headlineContent = { Text(app.label) },
                             leadingContent = { AppIcon(app.pkg) },
+                            supportingContent = if (styled) styledLine else null,
                             trailingContent = {
-                                Switch(checked = on, onCheckedChange = null)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { styleApp = app }) {
+                                        Icon(
+                                            Icons.Rounded.Tune,
+                                            stringResource(R.string.app_style_edit),
+                                            tint = if (styled) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Switch(checked = on, onCheckedChange = null)
+                                }
                             },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                             modifier = Modifier

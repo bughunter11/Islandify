@@ -12,6 +12,7 @@ object AppLanguage {
     const val SYSTEM = ""
     const val ENGLISH = "en"
     const val HINDI = "hi"
+    const val PORTUGUESE = "pt"   // PORTUGUESE
 
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences("islandify", Context.MODE_PRIVATE)

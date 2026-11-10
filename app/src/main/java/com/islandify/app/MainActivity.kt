@@ -32,6 +32,10 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides   // UIPOLISH
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -56,6 +60,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import com.islandify.app.core.IslandControl
 import com.islandify.app.core.IslandSettings
 import com.islandify.app.core.Perms
+import com.islandify.app.island.IslandController   // ISLANDI18N
 import com.islandify.app.island.IslandService
 import com.islandify.app.ui.onboarding.OnboardingScreen
 import com.islandify.app.ui.screens.AboutScreen
@@ -64,6 +69,7 @@ import com.islandify.app.ui.screens.AppsScreen
 import com.islandify.app.ui.screens.CustomizeScreen
 import com.islandify.app.ui.screens.HomeScreen
 import com.islandify.app.ui.theme.AppTheme
+import com.islandify.app.update.UpdateHost
 
 class MainActivity : ComponentActivity() {
     // Incremented in onResume so permission status refreshes when returning from Settings
@@ -78,12 +84,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         IslandSettings.init(this)
-        setContent { AppTheme { AppRoot(tick) } }
+        IslandController.attach(this)   // ISLANDI18N: island text ke liye context (services ke bina bhi)
+        setContent { AppTheme { AppRoot(tick); UpdateHost(tick) } }   // UPDATEKIT
     }
 
     override fun onResume() {
         super.onResume()
         tick++
+    }
+
+    override fun onStop() {
+        IslandSettings.flush()   // SMOOTHPATCH: app background me jaane se pehle pending settings likh do
+        super.onStop()
     }
 }
 
@@ -167,7 +179,11 @@ private fun MainTabs(tick: Int) {
                     }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxHeight()) {
+            // UIPOLISH: rail wale (wide) mode me bottom bar nahi hota, to gesture bar / side ke neeche content na jaye
+            val insetPad = if (wide) Modifier.windowInsetsPadding(
+                WindowInsets.systemBars.only(WindowInsetsSides.End + WindowInsetsSides.Bottom)
+            ) else Modifier
+            Box(Modifier.weight(1f).fillMaxHeight().then(insetPad)) {
                 // Tabs slide in the direction you are moving, with a soft fade
                 AnimatedContent(
                     targetState = tab,

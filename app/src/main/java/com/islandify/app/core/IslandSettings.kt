@@ -10,113 +10,19 @@ import com.islandify.app.ui.theme.*
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/** Live activity types the island can show. Each one can be switched on/off in the app. */
-enum class Trigger(val key: String, @StringRes val label: Int) {
-    Notifications("notif", R.string.trigger_notifications),
-    Media("media", R.string.trigger_media),
-    Calls("call", R.string.trigger_calls),
-    Charging("charge", R.string.trigger_charging),
-    Timer("timer", R.string.trigger_timer),
-    Devices("device", R.string.trigger_devices),
-    Battery("battery", R.string.trigger_battery),
-    Toggles("toggles", R.string.trigger_toggles),
-    Navigation("nav", R.string.trigger_navigation),
-    Tracking("track", R.string.trigger_tracking),
-    Downloads("download", R.string.trigger_downloads),
-    Quiet("quiet", R.string.trigger_quiet),
-}
-
-/**
- * Everything the island can show. Each kind has its own look (Customize > Pop-ups & activities).
- * [popup] = shown as a quick banner; the others (music, timer, call, navigation...) live in the small pill.
- */
-enum class IslandKind(val key: String, @StringRes val label: Int, val popup: Boolean) {
-    Notification("notif", R.string.banner_notification, true),
-    Charging("charging", R.string.banner_charging, true),
-    Unplugged("unplug", R.string.banner_unplugged, true),
-    LowBattery("low", R.string.banner_low, true),
-    Device("device", R.string.banner_device, true),
-    Silent("silent", R.string.banner_silent, true),
-    Vibrate("vibrate", R.string.banner_vibrate, true),
-    Dnd("dnd", R.string.banner_dnd, true),
-    Flashlight("torch", R.string.banner_flash, true),
-    Call("call", R.string.banner_call, false),
-    Media("media", R.string.banner_music, false),
-    Timer("timer", R.string.banner_timer, false),
-    Navigation("nav", R.string.banner_nav, false),
-    Tracking("track", R.string.banner_tracking, false),
-    Download("download", R.string.banner_download, false),
-}
-
-/**
- * w / h = length / height of the pop-up banner (or of the small pill for music, timer, call...).
- * cardW / cardH = size of the card that opens when tapped. text = text size. All 1 = normal.
- * corner < 0 = follow the global roundness. durationSec 0 = auto.
- */
-data class KindStyle(
-    val w: Float = 1f,
-    val h: Float = 1f,
-    val text: Float = 1f,
-    val corner: Float = -1f,
-    val durationSec: Int = 0,
-    val cardW: Float = 1f,
-    val cardH: Float = 1f,
-)
-
-/** Which kind a mode is (null = the idle pill). */
-fun kindOf(m: IslandMode): IslandKind? = when (m) {
-    is IslandMode.Notification -> IslandKind.Notification
-    is IslandMode.Charging -> if (m.connected) IslandKind.Charging else IslandKind.Unplugged
-    is IslandMode.LowBattery -> IslandKind.LowBattery
-    is IslandMode.Device -> IslandKind.Device
-    is IslandMode.Toggle -> when (m.kind) {
-        ToggleKind.Silent -> IslandKind.Silent
-        ToggleKind.Vibrate -> IslandKind.Vibrate
-        ToggleKind.Dnd -> IslandKind.Dnd
-        ToggleKind.Flashlight -> IslandKind.Flashlight
-    }
-    is IslandMode.Call -> IslandKind.Call
-    is IslandMode.Media -> IslandKind.Media
-    is IslandMode.Timer -> IslandKind.Timer
-    is IslandMode.Live -> when (m.kind) {
-        LiveKind.Navigation -> IslandKind.Navigation
-        LiveKind.Tracking -> IslandKind.Tracking
-        LiveKind.Download -> IslandKind.Download
-    }
-    IslandMode.Idle -> null
-}
-
-/**
- * Island shape, position, look and toggles. The app, the services and the listener all share this.
- *  - scale        : whole island bigger/smaller (content included)
- *  - widthScale   : width only
- *  - heightScale  : height only
- *  - corner       : 0.2 = less round, 1.0 = full pill
- *  - animSpeed    : spring speed (0.5 slow .. 2 fast)
- */
-/** Direction of a swipe on the island. */
-enum class SwipeDir { Up, Down, Left, Right }
-
-/** What a swipe can do. The user picks one per direction in Customize > Swipe gestures. */
-enum class SwipeAction(val key: String, @StringRes val label: Int) {
-    None("none", R.string.swipe_act_none),
-    Dismiss("dismiss", R.string.swipe_act_dismiss),          // collapse, then hide
-    ClearAll("clear", R.string.swipe_act_clear),             // dismiss + drop every waiting pop-up
-    Expand("expand", R.string.swipe_act_expand),             // pill -> card
-    OpenApp("open", R.string.swipe_act_open),                // open the app the island is showing
-    NextTrack("next", R.string.swipe_act_next),
-    PrevTrack("prev", R.string.swipe_act_prev),
-    PlayPause("playpause", R.string.swipe_act_playpause);
-
-    companion object {
-        fun from(key: String?, def: SwipeAction) = entries.firstOrNull { it.key == key } ?: def
-    }
-}
+// SPLITSET  load / save per page: Settings{Pill,Rules,Banner,Bubble,Card,App}.kt
+// SPLITBIG  core: IslandSettings.kt. Types: SettingsTypes.kt, backup: SettingsBackup.kt, resets: SettingsReset.kt
 
 object IslandSettings {
-    private var prefs: SharedPreferences? = null
+    internal var prefs: SharedPreferences? = null   // SPLITBIG: SettingsBackup.kt bhi padhta hai
 
     val scale = MutableStateFlow(1f)        // 0.5x .. 1.8x
     val widthScale = MutableStateFlow(1f)   // 0.6x .. 1.6x
@@ -143,9 +49,119 @@ object IslandSettings {
     val bgColor = MutableStateFlow(0xFF14121C.toInt())           // used when bgStyle == 2
     val islandAppAccent = MutableStateFlow(false)                // island glow uses the app accent instead of album art
     val autoCollapseSec = MutableStateFlow(6)                    // expanded card collapses by itself (0 = never)
-    val idlePill = MutableStateFlow(true)                        // small pill stays on screen when idle (tap = time / date / battery)
+    val idlePill = MutableStateFlow(false)                        // small pill stays on screen when idle (tap = time / date / battery)
+    // ---- Essentials-style island options ----
+    val outlineOn = MutableStateFlow(true)             // thin border around the island
+    val outlineThickness = MutableStateFlow(0.6f)      // dp, 0.3 .. 4
+    val outlineDynamic = MutableStateFlow(true)        // border follows the activity color
+    val outlineHideExpanded = MutableStateFlow(false)  // outline only the small pill / banner
+    val pulseShadow = MutableStateFlow(false)          // border pulses when a pop-up arrives
+    val pulseDurationMs = MutableStateFlow(1450)       // 400 .. 3000
+    val expandedCorner = MutableStateFlow(0f)          // dp for cards, 0 = follow roundness
+    val fontScale = MutableStateFlow(1f)               // text size of the whole island
+    val launcherOnly = MutableStateFlow(false)         // island only on the home screen (calls always show)
+    val hideInOwnerApp = MutableStateFlow(false)       // hide while the app that owns the activity is open
+    val briefCalendar = MutableStateFlow(false)        // next calendar event on the idle card
+    val briefWeather = MutableStateFlow(false)         // WEATHERKIT: idle card par mausam
+    val weatherF = MutableStateFlow(false)             // WEATHERKIT: Fahrenheit
+    val calHours = MutableStateFlow(24)                // CALKIT: sirf agle N ghante ka event dikhao (1..24)
+    val calAccounts = MutableStateFlow<Set<String>>(emptySet())   // CALKIT: chune hue accounts; khali = sab
+    // ---- Added from the Essentials island ----
+    val idleInfo = MutableStateFlow(false)             // time (left) + battery (right) on the small idle pill
+    val idleBatteryOnlyLow = MutableStateFlow(false)   // battery only when it is 30% or less, or charging
+    val idleAlarmHours = MutableStateFlow(0)           // next alarm shown on the idle pill when it rings within N hours (0 = off)
+    val flashlightPill = MutableStateFlow(false)       // pill stays on while the flashlight is on (card has a brightness slider)
+    val dismissOnOutside = MutableStateFlow(false)     // tap outside an open card closes it
+    val quietOn = MutableStateFlow(false)               // STATUSKIT: quiet hours
+    val quietFrom = MutableStateFlow(23 * 60)           // minutes after midnight
+    val quietTo = MutableStateFlow(7 * 60)
+    val hideFullscreen = MutableStateFlow(false)        // hide in games and video apps
+    val hideLandscape = MutableStateFlow(false)        // no island in landscape (calls still show)
+    val concealLocked = MutableStateFlow(true)         // lock screen: always hide sender and text   // MUSICKIT: default ON
+    val concealChatPics = MutableStateFlow(true)       // lock screen: app icon instead of the sender photo   // MUSICKIT: default ON
+    val baseOrder = MutableStateFlow(listOf("timer", "live", "download", "media"))   // top = shown first
+
+    /** Keeps only known keys, drops duplicates, appends anything missing. */
+    fun normalizeBaseOrder(saved: List<String>?): List<String> {
+        val all = listOf("timer", "live", "download", "media")
+        return (saved.orEmpty().filter { it in all } + all).distinct()
+    }
+
+    val directCardAll = MutableStateFlow(false)        // every message opens straight as the message card
+    val directCardReply = MutableStateFlow(false)      // only messages with a Reply option open straight as the card
+    val clearOnDismiss = MutableStateFlow(true)        // swiping a notification away also clears it from the shade
+    val mediaPeek = MutableStateFlow(false)            // music card opens when the next song starts
+    val mediaKeepPaused = MutableStateFlow(false)      // music pill stays after pause (no 10 s hide)
+    val showWhen = MutableStateFlow(2)                 // 0 unlocked, 1 screen on, 2 always
     val swipeSkip = MutableStateFlow(true)                       // swipe left/right on the island to skip tracks
     val stickyNotif = MutableStateFlow(false)                    // notifications stay on the island until tapped / swiped away
+
+    // ---- BUBBLEKIT: bubble (status-bar circle) ----
+    val bubbleSize = MutableStateFlow(32f)        // dp, 24..56
+    val bubbleGap = MutableStateFlow(2f)          // dp gap from the pill
+    val bubbleY = MutableStateFlow(0f)            // dp up / down nudge
+    val bubbleAlpha = MutableStateFlow(1f)        // background opacity
+    val bubbleSwipeOn = MutableStateFlow(true)    // swipe the bubble sideways to clear
+    val bubbleSwipeDist = MutableStateFlow(56f)   // dp needed to count as a swipe
+    // ---- BUBBLEKIT: message card (opens when the bubble is tapped) ----
+    val cardWidth = MutableStateFlow(0.92f)       // share of the screen width
+    val cardCorner = MutableStateFlow(30f)        // dp
+    val cardTextScale = MutableStateFlow(1f)
+    val cardAlpha = MutableStateFlow(1f)
+    val cardAccent = MutableStateFlow(0.45f)      // strength of the accent gradient at the bottom (0 = none)
+    val cardMaxLines = MutableStateFlow(10)   // CARDGROW
+    val cardScrollSpeed = MutableStateFlow(1f)    // CARDSPEED: text auto-scroll speed, 1 = normal
+    val cardButtons = MutableStateFlow(true)      // Mark as read / Open / Reply row
+    val cardRow = MutableStateFlow(true)          // row of bubbles under the card
+    // DEADCLEAN: cardUpAct / cardSideAct hata diye (swipe rules fixed: SWIPERULE)
+    val cardUpDist = MutableStateFlow(40f)        // dp
+    val cardSideDist = MutableStateFlow(64f)      // dp
+    // ---- BANNERKIT: pop-up banner (Customize > Banner) ----
+    val bannerW = MutableStateFlow(1f)            // width multiplier
+    val bannerH = MutableStateFlow(1f)            // height multiplier
+    val bannerCorner = MutableStateFlow(0f)       // < 0.2 = follow the island roundness
+    val bannerText = MutableStateFlow(1f)
+    val bannerAlpha = MutableStateFlow(1f)        // background opacity
+    val bannerAccent = MutableStateFlow(1f)       // strength of the accent glow (0 = none)
+    val bannerY = MutableStateFlow(0f)            // BANNERY: banner up / down (dp, Customize > Banner)
+    val pillStyle = MutableStateFlow(0)           // STYLEKIT: pill / island design (0..5)
+    val notchMode = MutableStateFlow(false)       // NOTCHMODE: island upar ke edge se juda (notch jaisa)
+    val pillAlpha = MutableStateFlow(1f)          // STYLEKIT2: pill opacity
+    val pillAccent = MutableStateFlow(1f)         // STYLEKIT2: pill accent glow strength
+    val bannerStyle = MutableStateFlow(0)         // STYLEKIT
+    val bubbleStyle = MutableStateFlow(0)         // STYLEKIT
+    val cardStyle = MutableStateFlow(0)           // STYLEKIT
+    val cardY = MutableStateFlow(0f)              // CARDY: message card up / down (dp, Customize > Message card)
+    // ---- MUSICKIT: music card (pill pe click karne par khulta hai) ----
+    val musicStyle = MutableStateFlow(0)          // 0..11 (naam Message card jaise)
+    val musicPlayerLayout = MutableStateFlow(0)   // MUSICLAYOUT: 0=Classic, 1=Expressive, 2=Glow, 3=Spectrum
+    val seekDesign = MutableStateFlow(0)          // SEEKDESIGN: 0=Waves, 1=Neon Pulse, 2=Aurora
+    val seekCustomColor = MutableStateFlow(0xFF22D3EE.toInt())   // SEEKDESIGN: user ka rang (mode 3)
+    val seekTimeTint = MutableStateFlow(false)    // SEEKDESIGN: time ka rang bar jaisa
+    val seekBarColorMode = MutableStateFlow(0)    // WAVYCOLOR: 0=Solid, 1=Gradient, 2=Album
+    val musicAlpha = MutableStateFlow(1f)         // background opacity
+    val musicAccent = MutableStateFlow(1f)        // album art ke rang ki glow
+    val musicCorner = MutableStateFlow(0f)        // < 8 = island ki roundness jaisa
+    val musicArtSize = MutableStateFlow(1f)       // album art ka size
+    val musicArtCorner = MutableStateFlow(14f)    // album art ke kone (dp)
+    val musicWave = MutableStateFlow(true)        // gaane ke naam ke paas waveform
+    val waveSpeed = MutableStateFlow(1f)          // WAVESYNC: waveform speed multiplier (0.25 .. 3)
+    val waveFollow = MutableStateFlow(true)       // WAVESYNC: waveform follows the player's playback speed
+    val musicAuto = MutableStateFlow(true)        // MUSICAUTO: music card = gaane ke rang ka
+    val musicPillAuto = MutableStateFlow(true)    // MUSICAUTO: music pill = gaane ke rang ka
+    val musicX = MutableStateFlow(0f)             // MUSICPOS: music card left (-) / right (+) (dp, main island position ke upar)
+    val musicY = MutableStateFlow(0f)             // MUSICPOS: music card up (-) / down (+) (dp, main island position ke upar)
+    val bubbleEnabled = MutableStateFlow(true)    // BUBBLETOGGLE: master switch, off = saare bubbles hide
+    val bubbleOverlap = MutableStateFlow(true)   // OVERLAPKIT / REVIVEKIT: ab switch se on / off (Customize > Bubble)
+    val bubbleExtras = MutableStateFlow(true)     // BUBBLELIVE: music / Clock timer / downloads bubble me bhi
+    val bubbleMove = MutableStateFlow(true)       // BUBBLEMOVE: long-press karke bubble khiskao (GitHub issue #7)
+    val bubbleFreeOn = MutableStateFlow(false)    // BUBBLEMOVE: true = bubble apni khud ki jagah par (pill ke saath nahi)
+    val bubbleFreeX = MutableStateFlow(0f)        // BUBBLEMOVE: bubble window ka left (dp, screen ke left se)
+    val bubbleFreeY = MutableStateFlow(0f)        // BUBBLEMOVE: bubble window ka top (dp, screen ke top se)
+    val privacyBanners = MutableStateFlow(true)   // EXTRAKIT: camera / mic / screen-record banners
+    val appleMusic = MutableStateFlow(true)       // APPLEMUSIC: Apple jaisa music card
+    val bannerSub = MutableStateFlow(true)        // second line (message text / detail)
+    val bannerBadge = MutableStateFlow(true)      // "+N" / dot at the end of a message banner
     val swipeUp = MutableStateFlow(SwipeAction.Dismiss)
     val swipeDown = MutableStateFlow(SwipeAction.None)
     val swipeLeft = MutableStateFlow(SwipeAction.NextTrack)
@@ -162,102 +178,59 @@ object IslandSettings {
     val enabled = MutableStateFlow(true)     // has the user left the island switched on?
 
     fun init(ctx: Context) {
+        AppLog.install(ctx)   // DEBUGKIT
         if (prefs != null) return
         val p = ctx.applicationContext.getSharedPreferences("islandify", Context.MODE_PRIVATE)
         prefs = p
-        scale.value = p.getFloat("scale", 1f)
-        widthScale.value = p.getFloat("w", 1f)
-        heightScale.value = p.getFloat("h", 1f)
-        offsetX.value = p.getFloat("x", 0f)
-        offsetY.value = p.getFloat("y", 10f)
-        kindStyles.value = IslandKind.entries.associate { t ->
-            val k = "bn_${t.key}"
-            t.key to KindStyle(
-                w = p.getFloat("${k}_w", 1f),
-                h = p.getFloat("${k}_h", 1f),
-                text = p.getFloat("${k}_t", 1f),
-                corner = p.getFloat("${k}_c", -1f),
-                durationSec = p.getInt("${k}_d", 0),
-                cardW = p.getFloat("${k}_cw", 1f),
-                cardH = p.getFloat("${k}_ch", 1f),
-            )
-        }
-        corner.value = p.getFloat("corner", 1f)
-        animSpeed.value = p.getFloat("speed", 1f)
-        glow.value = p.getBoolean("glow", true)
-        haptics.value = p.getBoolean("haptics", true)
-        // New activity types added in an update are switched ON once; after that the user decides.
-        val allKeys = Trigger.entries.map { it.key }.toSet()
-        val legacyKeys = setOf("notif", "media", "call", "charge", "timer", "device")
-        p.getStringSet("triggers", null)?.let { saved ->
-            val seen = p.getStringSet("triggersSeen", null)?.toSet() ?: legacyKeys
-            triggers.value = saved.toSet() + (allKeys - seen)
-        }
-        blockedApps.value = p.getStringSet("blocked", emptySet())?.toSet() ?: emptySet()
-        theme.value = p.getInt("theme", 0)
-        accentSource.value = p.getInt("accentSource", 0)
-        accentSeed.value = p.getInt("accentSeed", 0xFF7B3DF5.toInt())
-        bgStyle.value = p.getInt("bgStyle", 0)
-        bgColor.value = p.getInt("bgColor", 0xFF14121C.toInt())
-        islandAppAccent.value = p.getBoolean("islandAppAccent", false)
-        autoCollapseSec.value = p.getInt("autoCollapse", 6)
-        swipeSkip.value = p.getBoolean("swipeSkip", true)
-        stickyNotif.value = p.getBoolean("stickyNotif", false)
-        swipeUp.value = SwipeAction.from(p.getString("swipeUp", null), SwipeAction.Dismiss)
-        swipeDown.value = SwipeAction.from(p.getString("swipeDown", null), SwipeAction.None)
-        swipeLeft.value = SwipeAction.from(p.getString("swipeLeft", null), SwipeAction.NextTrack)
-        swipeRight.value = SwipeAction.from(p.getString("swipeRight", null), SwipeAction.PrevTrack)
-        // Old "Swipe to skip tracks" switch was OFF: keep left / right off
-        if (!p.contains("swipeLeft") && !swipeSkip.value) {
-            swipeLeft.value = SwipeAction.None
-            swipeRight.value = SwipeAction.None
-        }
-        idlePill.value = p.getBoolean("idlePill", true)
-        onboarded.value = p.getBoolean("onboarded", false)
-        enabled.value = p.getBoolean("enabled", true)
+        // SPLITSET: har page ki settings apni file me (SettingsPill / Rules / Banner / Bubble / Card / App .kt)
+        loadPill(p)
+        loadRules(p)
+        loadBanner(p)
+        loadBubble(p)
+        loadCard(p)
+        loadApp(p)
+        Motion.start(ctx)         // MOTIONKIT (PATCH_10_11_12)
+        BackupNudge.start(ctx)    // NUDGEKIT (PATCH_10_11_12)
     }
 
+    // SMOOTHPATCH: save() ab turant main thread par ~150 keys nahi likhta. Kai calls (slider, switch, chips)
+    // ek hi write me mil jaati hain, aur write background thread par hota hai.
+    private val saveScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Volatile private var saveJob: Job? = null
+    private val saveLock = Any()
+
     fun save() {
-        prefs?.edit()
-            ?.putFloat("scale", scale.value)
-            ?.putFloat("w", widthScale.value)
-            ?.putFloat("h", heightScale.value)
-            ?.putFloat("x", offsetX.value)
-            ?.putFloat("y", offsetY.value)
-            ?.putFloat("corner", corner.value)
-            ?.putFloat("speed", animSpeed.value)
-            ?.putBoolean("glow", glow.value)
-            ?.putBoolean("haptics", haptics.value)
-            ?.putStringSet("triggers", triggers.value)
-            ?.putStringSet("triggersSeen", Trigger.entries.map { it.key }.toSet())
-            ?.putStringSet("blocked", blockedApps.value)
-            ?.putInt("theme", theme.value)
-            ?.putInt("accentSource", accentSource.value)
-            ?.putInt("accentSeed", accentSeed.value)
-            ?.putInt("bgStyle", bgStyle.value)
-            ?.putInt("bgColor", bgColor.value)
-            ?.putBoolean("islandAppAccent", islandAppAccent.value)
-            ?.putInt("autoCollapse", autoCollapseSec.value)
-            ?.putBoolean("swipeSkip", swipeSkip.value)
-            ?.putBoolean("stickyNotif", stickyNotif.value)
-            ?.putString("swipeUp", swipeUp.value.key)
-            ?.putString("swipeDown", swipeDown.value.key)
-            ?.putString("swipeLeft", swipeLeft.value.key)
-            ?.putString("swipeRight", swipeRight.value.key)
-            ?.putBoolean("idlePill", idlePill.value)
-            ?.putBoolean("onboarded", onboarded.value)
-            ?.putBoolean("enabled", enabled.value)
-            ?.apply()
-        // Banner styles (one set of keys per banner type)
-        prefs?.edit()?.also { e ->
-            IslandKind.entries.forEach { t ->
-                val b = kindStyle(t)
-                val k = "bn_${t.key}"
-                e.putFloat("${k}_w", b.w).putFloat("${k}_h", b.h).putFloat("${k}_t", b.text)
-                    .putFloat("${k}_c", b.corner).putInt("${k}_d", b.durationSec)
-                    .putFloat("${k}_cw", b.cardW).putFloat("${k}_ch", b.cardH)
-            }
-        }?.apply()
+        if (prefs == null) return
+        saveJob?.cancel()
+        saveJob = saveScope.launch {
+            delay(150)
+            saveNow()
+        }
+    }
+
+    /** Pending save cancel karke abhi likh do (export, app band hone par). */
+    fun flush() {
+        saveJob?.cancel()
+        saveJob = null
+        saveNow()
+    }
+
+    fun cancelPendingSave() {
+        saveJob?.cancel()
+        saveJob = null
+    }
+
+    private fun saveNow() {
+        synchronized(saveLock) {
+            val e = prefs?.edit() ?: return
+            savePill(e)
+            saveRules(e)
+            saveBanner(e)
+            saveBubble(e)
+            saveCard(e)
+            saveApp(e)
+            e.apply()
+        }
     }
 
     fun kindStyle(t: IslandKind): KindStyle = kindStyles.value[t.key] ?: KindStyle()
@@ -289,49 +262,4 @@ object IslandSettings {
         save()
     }
 
-    fun resetShape() = preset(1f, 1f, 1f)
-
-    fun resetKinds() {
-        kindStyles.value = emptyMap()
-        save()
-    }
-
-    fun resetLook() {
-        corner.value = 1f
-        animSpeed.value = 1f
-        glow.value = true
-        haptics.value = true
-        save()
-    }
-
-    fun reset() {
-        scale.value = 1f
-        widthScale.value = 1f
-        heightScale.value = 1f
-        offsetX.value = 0f
-        offsetY.value = 10f
-        save()
-    }
-
-    /** Island + look + behaviour + colors + theme. (Triggers and blocked apps are kept.) */
-    fun resetAll() {
-        reset()
-        resetKinds()
-        resetLook()
-        autoCollapseSec.value = 6
-        swipeSkip.value = true
-        stickyNotif.value = false
-        swipeUp.value = SwipeAction.Dismiss
-        swipeDown.value = SwipeAction.None
-        swipeLeft.value = SwipeAction.NextTrack
-        swipeRight.value = SwipeAction.PrevTrack
-        idlePill.value = true
-        islandAppAccent.value = false
-        theme.value = 0
-        accentSource.value = 0
-        accentSeed.value = 0xFF7B3DF5.toInt()
-        bgStyle.value = 0
-        bgColor.value = 0xFF14121C.toInt()
-        save()
-    }
 }

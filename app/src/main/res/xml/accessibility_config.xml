@@ -6,6 +6,7 @@
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault"
+    android:accessibilityEventTypes="typeWindowStateChanged"
     android:canRetrieveWindowContent="false"
     android:description="@string/a11y_description"
     android:canPerformGestures="false" />
