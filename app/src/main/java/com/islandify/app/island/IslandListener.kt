@@ -302,10 +302,12 @@ class IslandListener : NotificationListenerService() {
 
         val app = appLabel(sbn)
 
-        // Lock screen: never show private content, skip secret notifications completely
+        // Lock screen: secret notifications are never shown, private ones are masked unless the user
+        // allowed reading them there (Customize > "Read on the locked screen").
         val locked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
         if (locked && n.visibility == Notification.VISIBILITY_SECRET) return
-        val hide = locked && n.visibility != Notification.VISIBILITY_PUBLIC
+        val hide = locked && n.visibility != Notification.VISIBILITY_PUBLIC &&
+            !IslandSettings.showOnLock.value
 
         // Inline reply (RemoteInput) and "Mark as read" actions, e.g. Messages / WhatsApp / Telegram
         val acts: List<Notification.Action> =

@@ -172,6 +172,18 @@ class IslandOverlay(
         }
     }
 
+    /** Screen on / off. Used to keep a banner until it can actually be seen (lock screen). */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            val on = when (i.action) {
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> true
+                Intent.ACTION_SCREEN_OFF -> false
+                else -> return
+            }
+            IslandController.setScreenOn(on)
+        }
+    }
+
     /** Bluetooth connect + wired headphones. Reading the name needs BLUETOOTH_CONNECT (Android 12+). */
     private val deviceReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
@@ -242,6 +254,7 @@ class IslandOverlay(
                     val speed by IslandSettings.animSpeed.collectAsState()
                     val glow by IslandSettings.glow.collectAsState()
                     val haptics by IslandSettings.haptics.collectAsState()
+                    val amoled by IslandSettings.islandAmoled.collectAsState()
                     val useAppAccent by IslandSettings.islandAppAccent.collectAsState()
                     val replying by IslandController.replying.collectAsState()
                     val queued by IslandController.queued.collectAsState()
@@ -288,6 +301,7 @@ class IslandOverlay(
                         animSpeed = speed,
                         glow = glow,
                         haptics = haptics,
+                        amoled = amoled,
                         onClick = IslandController::toggle,
                         onLongPress = IslandController::large,
                         onDismiss = IslandController::dismiss,
@@ -390,6 +404,20 @@ class IslandOverlay(
     private fun registerReceivers() {
         if (receiversOn) return
         receiversOn = true
+        // Banners wait while the screen is off, so a message is still there on the lock screen
+        IslandController.setScreenOn(
+            runCatching { host.getSystemService(android.os.PowerManager::class.java)?.isInteractive }
+                .getOrNull() ?: true
+        )
+        ContextCompat.registerReceiver(
+            host, screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_USER_PRESENT)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         ContextCompat.registerReceiver(
             host, powerReceiver,
             IntentFilter().apply {
@@ -440,6 +468,7 @@ class IslandOverlay(
     private fun unregisterReceivers() {
         if (!receiversOn) return
         receiversOn = false
+        runCatching { host.unregisterReceiver(screenReceiver) }
         runCatching { host.unregisterReceiver(powerReceiver) }
         runCatching { host.unregisterReceiver(deviceReceiver) }
         runCatching { host.unregisterReceiver(batteryReceiver) }

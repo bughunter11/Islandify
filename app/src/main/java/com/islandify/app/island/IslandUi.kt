@@ -162,6 +162,7 @@ fun DynamicIslandUi(
     animSpeed: Float = 1f,
     glow: Boolean = true,
     haptics: Boolean = true,
+    amoled: Boolean = false,
     onClick: () -> Unit,
     onLongPress: () -> Unit = {},
     onDismiss: () -> Unit = {},
@@ -193,7 +194,7 @@ fun DynamicIslandUi(
     )
     CompositionLocalProvider(LocalDensity provides Density(base.density * scale, base.fontScale * textMul)) {
         IslandBody(
-            mode, level, widthScale, heightScale, cornerFactor, animSpeed, glow, haptics,
+            mode, level, widthScale, heightScale, cornerFactor, animSpeed, glow, haptics, amoled,
             onClick, onLongPress, onDismiss, actions,
             onSwipeSide, appAccent, secondary, queued, onSwipe
         )
@@ -210,6 +211,7 @@ private fun IslandBody(
     animSpeed: Float,
     glow: Boolean,
     haptics: Boolean,
+    amoled: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     onDismiss: () -> Unit,
@@ -300,8 +302,8 @@ private fun IslandBody(
     val corner = (height / 2 * cf).coerceIn(12.dp, 46.dp)
     val shape = RoundedCornerShape(corner)
 
-    // Glow: accent color from the album art / current mode
-    val glowTarget: Color = if (!glow) Color.Transparent else when (mode) {
+    // Glow: accent color from the album art / current mode. AMOLED keeps the island pure black.
+    val glowTarget: Color = if (!glow || amoled) Color.Transparent else when (mode) {
         is IslandMode.Media -> appAccent ?: mode.accent?.let { Color(it) } ?: Color.Transparent
         is IslandMode.Charging -> Green
         is IslandMode.Call -> Green
@@ -331,8 +333,14 @@ private fun IslandBody(
                 }
             }
             .border(
-                0.6.dp,
-                if (glowColor.alpha > 0f) glowColor.copy(alpha = glowColor.alpha * 0.55f) else Color(0xFF1F1F21),
+                // AMOLED: a bright outline, otherwise the pure black pill disappears on a black
+                // wallpaper / lock screen where the pixels next to it are simply off.
+                if (amoled) 1.dp else 0.6.dp,
+                when {
+                    amoled -> Color.White.copy(alpha = if (lvl == IslandLevel.Compact) 0.38f else 0.24f)
+                    glowColor.alpha > 0f -> glowColor.copy(alpha = glowColor.alpha * 0.55f)
+                    else -> Color(0xFF1F1F21)
+                },
                 shape
             )
             // One gesture handler for everything: tap, long-press and swipe.
@@ -426,16 +434,16 @@ private fun IslandBody(
             label = "content"
         ) { (m, l) ->
             if (l == IslandLevel.Compact) {
-                Compact(m, queued, sec)
+                Compact(m, queued, sec, amoled)
             } else if (l == IslandLevel.Banner) {
-                Banner(m, queued)
+                Banner(m, queued, amoled)
             } else if (sec != null && (m is IslandMode.Live || m is IslandMode.Timer)) {
                 Column(Modifier.fillMaxSize()) {
-                    Box(Modifier.weight(1f)) { Expanded(m, l, actions) }
+                    Box(Modifier.weight(1f)) { Expanded(m, l, actions, amoled) }
                     MiniPlayer(sec, actions)
                 }
             } else {
-                Expanded(m, l, actions)
+                Expanded(m, l, actions, amoled)
             }
         }
     }
@@ -484,7 +492,7 @@ private fun DownloadRing(progress: Int, size: Dp) {
 }
 
 @Composable
-private fun Compact(m: IslandMode, queued: Int, sec: IslandMode.Media?) {
+private fun Compact(m: IslandMode, queued: Int, sec: IslandMode.Media?, amoled: Boolean = false) {
     val primary = MaterialTheme.colorScheme.primary
     Row(
         Modifier.fillMaxSize().padding(horizontal = 13.dp),
@@ -509,7 +517,13 @@ private fun Compact(m: IslandMode, queued: Int, sec: IslandMode.Media?) {
                     size = 13
                 )
                 if (queued > 0) CountBadge(queued, primary)
-                else Box(Modifier.size(7.dp).clip(CircleShape).background(primary))
+                else Box(
+                    Modifier.size(if (amoled) 9.dp else 7.dp).clip(CircleShape).background(primary)
+                        .then(
+                            if (amoled) Modifier.border(1.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+                            else Modifier
+                        )
+                )
             }
             is IslandMode.Media -> {
                 Art(m, 25.dp, 7.dp)
@@ -634,7 +648,7 @@ private fun BannerBadge(icon: ImageVector, tint: Color, bg: Color, ts: Float = 1
 }
 
 @Composable
-private fun Banner(m: IslandMode, queued: Int) {
+private fun Banner(m: IslandMode, queued: Int, amoled: Boolean = false) {
     val primary = MaterialTheme.colorScheme.primary
     val kindStyles by IslandSettings.kindStyles.collectAsState()
     val ts = kindOf(m)?.let { kindStyles[it.key]?.text } ?: 1f
@@ -667,7 +681,13 @@ private fun Banner(m: IslandMode, queued: Int) {
             subtitle = m.text.ifBlank { m.app },
             trail = {
                 if (queued > 0) CountBadge(queued, primary)
-                else Box(Modifier.size((7 * ts).dp).clip(CircleShape).background(primary))
+                else Box(
+                    Modifier.size(((if (amoled) 9 else 7) * ts).dp).clip(CircleShape).background(primary)
+                        .then(
+                            if (amoled) Modifier.border(1.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+                            else Modifier
+                        )
+                )
             },
             ts = ts
         )
@@ -689,14 +709,14 @@ private fun Banner(m: IslandMode, queued: Int) {
             subtitle = m.subtitle(),
             ts = ts
         )
-        else -> Compact(m, queued, null)
+        else -> Compact(m, queued, null, amoled)
     }
 }
 
 /* ------------------------------ EXPANDED / LARGE ------------------------------ */
 
 @Composable
-private fun Expanded(m: IslandMode, level: IslandLevel, a: IslandActions) {
+private fun Expanded(m: IslandMode, level: IslandLevel, a: IslandActions, amoled: Boolean = false) {
     val primary = MaterialTheme.colorScheme.primary
     val large = level == IslandLevel.Large
     when (m) {
@@ -748,7 +768,7 @@ private fun Expanded(m: IslandMode, level: IslandLevel, a: IslandActions) {
                         )
                         Spacer(Modifier.height(2.dp))
                         Label(
-                            m.text, color = Color(0xFFD1D1D6), size = 14,
+                            m.text, color = if (amoled) Color(0xFFEDEDF0) else Color(0xFFD1D1D6), size = 14,
                             lines = if (typing) 1 else if (large) 6 else 2, weight = FontWeight.Normal
                         )
                     }

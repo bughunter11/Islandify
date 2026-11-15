@@ -76,6 +76,15 @@ object IslandController {
     /** How long a paused song stays on the island before it hides. */
     private const val PAUSE_HIDE_MS = 10_000L
 
+    /**
+     * The reply box has no hide timer while the user types, so a card could stay open forever if the
+     * keyboard is closed with Back or the user just walks away. This is the safety net.
+     */
+    private const val REPLY_TIMEOUT_MS = 60_000L
+
+    /** A banner that arrives while the screen is off waits for it, but not longer than this. */
+    private const val SCREEN_OFF_HOLD_MS = 3 * 60_000L
+
     /** Notifications waiting behind the banner that is on screen (oldest is dropped when full). */
     private const val MAX_QUEUE = 5
 
@@ -119,6 +128,14 @@ object IslandController {
     private var dlMode: IslandMode.Live? = null
     private var hidden = false
     private var flashJob: Job? = null
+    /** The short pause after a banner is gone, kept apart from [flashJob] so [refresh] is not blocked. */
+    private var cleanupJob: Job? = null
+    /** Every new banner bumps this; timers of an older banner see a different value and stop. */
+    private var flashGen = 0
+    /** Watchdog for the reply box (the only card without a hide timer). */
+    private var replyJob: Job? = null
+    /** False between SCREEN_OFF and SCREEN_ON: a banner waits instead of expiring where nobody sees it. */
+    private val screenOn = MutableStateFlow(true)
 
     /** A banner (notification / charging / device...) that is on screen or waiting for its turn. */
     private data class Flash(
@@ -190,7 +207,10 @@ object IslandController {
     fun toggle() {
         if (_replying.value) return   // tapping the text box must not open the chat
         if (_level.value == IslandLevel.Compact) {
-            _level.value = IslandLevel.Expanded
+            // A pill that is still alive (sticky notification) gets a real show time again, so it
+            // cannot stay open forever; the idle pill just opens the small card.
+            if (flashJob?.isActive == true) reflash(IslandLevel.Expanded, 10_000)
+            else _level.value = IslandLevel.Expanded
             return
         }
         if (_level.value == IslandLevel.Banner) {
@@ -199,10 +219,8 @@ object IslandController {
             // Everything else (charging, device, toggles, notifications with buttons) grows into the card.
             val opensApp = m is IslandMode.Notification && !(m.canReply || m.canMarkRead)
             if (!opensApp) {
-                if (flashJob?.isActive == true) {
-                    flashJob?.cancel()
-                    startFlash(Flash(m, 7000, IslandLevel.Expanded, flashOpen, flashPkg, flashReply, flashMarkRead, curFlash?.key))
-                } else _level.value = IslandLevel.Expanded
+                // Restart the show time: an opened card stays readable for its full time.
+                reflash(IslandLevel.Expanded, 7000)
                 return
             }
         }
@@ -255,10 +273,21 @@ object IslandController {
         val m = _mode.value
         if (m is IslandMode.Idle || _replying.value) return
         val next = if (_level.value == IslandLevel.Large) IslandLevel.Expanded else IslandLevel.Large
-        if (flashJob?.isActive == true) {
-            flashJob?.cancel()
-            startFlash(Flash(m, 9000, next, flashOpen, flashPkg, flashReply, flashMarkRead, curFlash?.key))
-        } else _level.value = next
+        if (flashJob?.isActive == true) reflash(next, 9000) else _level.value = next
+    }
+
+    /**
+     * Shows the card that is on screen again at [level] for [durationMs].
+     * Used when the user opens / grows a banner: the card gets a new, full hide timer and the same
+     * source intent, actions and notification key, so it still closes exactly like a fresh banner.
+     */
+    private fun reflash(level: IslandLevel, durationMs: Long) {
+        val f = curFlash
+        if (f == null) {
+            _level.value = level
+            return
+        }
+        startFlash(f.copy(durationMs = durationMs, level = level, seen = false))
     }
 
     /** Swipe up: collapse first, then hide the island (until something new arrives). */
@@ -368,6 +397,9 @@ object IslandController {
         callDecline = decline
         hidden = false
         _replying.value = false
+        replyJob?.cancel()
+        replyJob = null
+        cleanupJob?.cancel()
         if (stickyHeld) curFlash?.let { parkSticky(it) }   // keep the sticky pill (before cancel)
         flashJob?.cancel()
         flashQueue.removeAll { !it.seen }                   // drop only unseen pop-ups, keep sticky ones
@@ -434,7 +466,7 @@ object IslandController {
         if (callMode != null) return
         // Per-banner "show time" from Customize (0 / unset = the default time of the caller)
         val shownMs = if (level == IslandLevel.Banner) IslandSettings.kindDurationMs(m) ?: durationMs else durationMs
-        val item = Flash(m, shownMs, level, open, pkg, reply, markRead, key)
+        var item = Flash(m, shownMs, level, open, pkg, reply, markRead, key)
 
         val showing = flashJob?.isActive == true
         if (showing || _replying.value) {
@@ -456,6 +488,10 @@ object IslandController {
                     enqueue(item)
                     return
                 }
+            } else if (_level.value == IslandLevel.Expanded || _level.value == IslandLevel.Large) {
+                // The user has this card open: a new message from the same chat must not snap it
+                // back to the small banner, it only replaces the text.
+                item = item.copy(level = _level.value)
             }
         }
         flashJob?.cancel()
@@ -479,26 +515,33 @@ object IslandController {
     /**
      * A sticky pill is showing and a NEW (not yet seen) banner is waiting: let the new one show first,
      * the sticky notification goes back to the queue and returns as a pill afterwards.
+     * Returns true when another banner took over (the caller must stop: its job was cancelled).
      */
-    private fun onStickyCollapsed() {
-        val cur = curFlash ?: return
+    private fun onStickyCollapsed(): Boolean {
+        val cur = curFlash ?: return false
         val i = flashQueue.indexOfFirst { !it.seen }
-        if (i < 0) return
+        if (i < 0) return false
         val next = flashQueue.removeAt(i)
         parkSticky(cur)
-        flashJob?.cancel()
-        startFlash(next)
+        startFlash(next)             // cancels this job, so the old banner cannot come back later
+        return true
     }
 
-    /** The notification was removed from the shade (or by its app): its sticky pill goes too. */
+    /** The notification was removed from the shade (or by its app): its pill / card goes too. */
     fun notificationRemoved(key: String) {
         val before = flashQueue.size
-        flashQueue.removeAll { it.key == key && it.seen }
+        flashQueue.removeAll { it.key == key }
         if (flashQueue.size != before) _queued.value = flashQueue.size
-        if (stickyFlag && flashJob?.isActive == true && !_replying.value && curFlash?.key == key) endFlash()
+        // Works for a normal banner too, not only for a sticky one: a card with stale text from a
+        // notification that no longer exists must not stay on screen.
+        if (curFlash?.key == key) endFlash()
     }
 
     private fun startFlash(f: Flash) {
+        cleanupJob?.cancel()
+        flashJob?.cancel()
+        flashGen++
+        val gen = flashGen
         curFlash = f
         flashOpen = f.open
         flashPkg = f.pkg
@@ -513,20 +556,38 @@ object IslandController {
         val sticky = IslandSettings.stickyNotif.value && f.mode is IslandMode.Notification && f.pkg != null
         stickyFlag = sticky
         flashJob = scope.launch {
+            // Nobody can see the island while the screen is off: wait for it instead of burning the
+            // show time behind the lock screen. After SCREEN_OFF_HOLD_MS the banner is dropped.
+            if (!screenOn.value) {
+                val on = withTimeoutOrNull(SCREEN_OFF_HOLD_MS) { screenOn.first { it } }
+                if (on == null) {
+                    if (gen == flashGen) {
+                        _level.value = IslandLevel.Compact
+                        afterFlash()
+                    }
+                    return@launch
+                }
+            }
+            if (gen != flashGen) return@launch
             if (sticky) {
                 // Show it for its normal time, then shrink to the small pill (auto-collapse) and stay.
                 if (!f.seen) {
                     delay(f.durationMs)
+                    if (gen != flashGen) return@launch
                     _level.value = IslandLevel.Compact
                 } else {
                     delay(60)                // let startFlash() finish assigning flashJob first
+                    if (gen != flashGen) return@launch
                 }
-                onStickyCollapsed()          // a newer banner is waiting? show it first
-                awaitCancellation()          // job stays "active" until endFlash() / dismiss() cancels it
+                // A newer banner is waiting? hand over to it; this job is done.
+                if (onStickyCollapsed()) return@launch
+                awaitCancellation()          // stays as a pill until endFlash() / dismiss() cancels it
             }
             delay(f.durationMs)
+            if (gen != flashGen) return@launch
             _level.value = IslandLevel.Compact
             delay(350)
+            if (gen != flashGen) return@launch
             afterFlash()
         }
     }
@@ -537,6 +598,8 @@ object IslandController {
         _queued.value = flashQueue.size
         if (next != null) startFlash(next) else {
             curFlash = null
+            stickyFlag = false
+            _level.value = IslandLevel.Compact
             _mode.value = base()
         }
     }
@@ -562,10 +625,17 @@ object IslandController {
 
     private fun endFlash() {
         stickyFlag = false
+        flashGen++
         flashJob?.cancel()
+        flashJob = null
+        replyJob?.cancel()
+        replyJob = null
+        _replying.value = false
         _level.value = IslandLevel.Compact
-        flashJob = scope.launch {
+        cleanupJob?.cancel()
+        cleanupJob = scope.launch {
             delay(350)
+            cleanupJob = null          // afterFlash() may start the next banner, which cancels jobs
             afterFlash()
         }
     }
@@ -575,7 +645,6 @@ object IslandController {
     /** "Mark as read" button: fires the notification's own action, then closes the card. */
     fun markRead() {
         runCatching { flashMarkRead?.send() }
-        _replying.value = false
         endFlash()
     }
 
@@ -584,12 +653,22 @@ object IslandController {
         if (flashReply == null) return
         stickyFlag = false
         flashJob?.cancel()          // stop the 4.5 s auto-hide while the user types
+        flashJob = null
         _replying.value = true
+        // Nothing else closes the card while the user types: if the keyboard is dismissed with
+        // Back, or the user just leaves, this watchdog closes it instead of leaving it on screen.
+        replyJob?.cancel()
+        replyJob = scope.launch {
+            delay(REPLY_TIMEOUT_MS)
+            if (_replying.value) cancelReply()
+        }
     }
 
     fun cancelReply() {
         if (!_replying.value) return
         _replying.value = false
+        replyJob?.cancel()
+        replyJob = null
         endFlash()
     }
 
@@ -610,11 +689,22 @@ object IslandController {
             a.actionIntent.send(ctx, 0, fill)
         }.isSuccess
         _replying.value = false
+        replyJob?.cancel()
+        replyJob = null
         if (ok) {
             flash(IslandMode.Notification("Sent", "Reply sent", text), 1800)
         } else {
             endFlash()
         }
+    }
+
+    /**
+     * Screen turned on / off. Banners wait while it is off instead of expiring where nobody sees them
+     * (so a message is still readable on the lock screen), and a reply box never survives the lock.
+     */
+    fun setScreenOn(on: Boolean) {
+        screenOn.value = on
+        if (!on && _replying.value) cancelReply()
     }
 
     /* ---------------- timer ---------------- */

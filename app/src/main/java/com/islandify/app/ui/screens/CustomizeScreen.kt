@@ -61,6 +61,8 @@ fun CustomizeScreen() {
     val swRight by IslandSettings.swipeRight.collectAsState()
     val stickyNotif by IslandSettings.stickyNotif.collectAsState()
     val idlePill by IslandSettings.idlePill.collectAsState()
+    val islandAmoled by IslandSettings.islandAmoled.collectAsState()
+    val showOnLock by IslandSettings.showOnLock.collectAsState()
     val dynamicOk = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     fun nudge(dx: Float, dy: Float) {
@@ -171,6 +173,16 @@ fun CustomizeScreen() {
                 icon = Icons.Rounded.PushPin, title = stringResource(R.string.cust_sticky_notif),
                 subtitle = stringResource(R.string.cust_sticky_notif_sub),
                 checked = stickyNotif, onChange = { IslandSettings.stickyNotif.value = it; IslandSettings.save() }
+            )
+            ToggleRow(
+                icon = Icons.Rounded.Contrast, title = stringResource(R.string.cust_amoled_island),
+                subtitle = stringResource(R.string.cust_amoled_island_sub),
+                checked = islandAmoled, onChange = { IslandSettings.islandAmoled.value = it; IslandSettings.save() }
+            )
+            ToggleRow(
+                icon = Icons.Rounded.Lock, title = stringResource(R.string.cust_lock_read),
+                subtitle = stringResource(R.string.cust_lock_read_sub),
+                checked = showOnLock, onChange = { IslandSettings.showOnLock.value = it; IslandSettings.save() }
             )
             ToggleRow(
                 icon = Icons.Rounded.Palette, title = stringResource(R.string.cust_app_accent),

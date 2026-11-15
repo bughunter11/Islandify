@@ -186,6 +186,10 @@
     <string name="cust_idle_pill_sub">छोटी पिल स्क्रीन पर रहती है; समय, तारीख़ और बैटरी के लिए टैप करें</string>
     <string name="cust_sticky_notif">नोटिफिकेशन हटाने तक रुकें</string>
     <string name="cust_sticky_notif_sub">कुछ सेकंड बाद नोटिफिकेशन छोटी पिल में सिमट जाएगा और तब तक वहीं रहेगा जब तक आप उसे टैप, ऊपर स्वाइप, रिप्लाई या मार्क ऐज़ रीड न करें</string>
+    <string name="cust_amoled_island">AMOLED आइलैंड</string>
+    <string name="cust_amoled_island_sub">शुद्ध काली पिल और साफ़ सफ़ेद आउटलाइन, ताकि AMOLED वॉलपेपर और लॉक स्क्रीन पर भी पढ़ा जा सके</string>
+    <string name="cust_lock_read">लॉक स्क्रीन पर पढ़ें</string>
+    <string name="cust_lock_read_sub">फ़ोन लॉक होने पर भेजने वाले का नाम और संदेश दिखाएँ। गोपनीय नोटिफिकेशन छिपे ही रहेंगे</string>
     <string name="cust_swipe_skip">स्वाइप करके गाने बदलें</string>
     <string name="cust_swipe_skip_sub">अगले के लिए आइलैंड बाएँ, पिछले के लिए दाएँ स्वाइप करें</string>
     <string name="cust_app_accent">आइलैंड ऐप का एक्सेंट रंग इस्तेमाल करे</string>
