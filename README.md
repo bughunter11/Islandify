@@ -46,7 +46,7 @@ Every activity below can be turned on or off in the **Activities** tab, and noti
 
 | Activity | What happens |
 |---|---|
-| Notifications | Messages and alerts pop up on the island. **Reply** (with a keyboard on the island) and the notification's own buttons (**Mark as read**, **No thanks**, **Turn on** ...) work from the card. |
+| Notifications | Messages and alerts pop up on the island. **Reply** (with a keyboard on the island) and the notification's own buttons (**Mark as read**, **No thanks**, **Turn on** ...) work from the card. A chat with several new messages shows its last messages on one card, which grows to fit them. |
 | Music and media | Album art, a moving sound wave, play / pause / next / previous and a progress bar. An optional Apple-style card has a thin bar and bigger buttons. |
 | Calls | Incoming, outgoing and ongoing calls. **Decline**, **Answer**, **Speaker** and **Mute** are buttons right in the pill. |
 | Charging | A battery banner when you plug in or unplug. Shows fast or wireless charging, the approximate watts and the time left to full (when the phone reports them). |
@@ -123,7 +123,7 @@ Customize has four groups: **Pill** (opens Placement, Visuals, Duration and Beha
 | **Placement** | Shape presets (Small, Normal, Large, Wide, Tall), width and height, left / right and up / down position in 1 dp steps, **auto align with the front camera**, and the length, height and card size of each activity (**Pop-ups and activities**). |
 | **Visuals** | Corner roundness, card corner, island text size, accent glow (optionally using your app color), border outline (thickness, dynamic colors, hide when the card is open), glow flash on a new pop-up, and text size and corners per activity. |
 | **Duration** | Auto-collapse time for cards, animation speed, glow flash duration, and how long each pop-up stays (show time per activity). |
-| **Behavior** | The four swipe gestures. Visibility rules: show when (Unlocked, Screen on, Always), only on the home screen, hide inside its own app, hide in landscape, tap outside to close. **Quiet hours** and hide in games and video apps. Idle pill (time, battery, alarm, next calendar event), flashlight pill, camera / mic banners and vibration feedback. Notifications and music (swipe also clears the notification, open card on song change, keep the pill while paused, Apple-style music card, music / timer / downloads as bubbles). Activity priority. Lock screen privacy (hide message text and sender photos, or **read on the locked screen**), and **AMOLED island** (pure black, glow off, visible outline). |
+| **Behavior** | The four swipe gestures. Visibility rules: show when (Unlocked, Screen on, Always), only on the home screen, hide inside its own app, hide in landscape, tap outside to close. **Quiet hours** and hide in games and video apps. Idle pill (time, battery, alarm, next calendar event), flashlight pill, camera / mic banners and vibration feedback. Notifications and music (swipe also clears the notification, open card on song change, keep the pill while paused, Apple-style music card, music / timer / downloads as bubbles). Activity priority. Lock screen privacy (hide message text and sender photos, or **read on the locked screen**), **AMOLED island** (pure black, glow off, visible outline) and **wake screen for notifications** (lights up the lock screen, since apps cannot draw on the Always-On Display). |
 | **Bubble** | Size, gap from the pill, up / down, opacity, swipe to clear and swipe distance. |
 | **Message card** | Width, up / down, corner, text size, opacity, accent strength, message lines, text auto-scroll speed, buttons, bubbles row, and swipe distances. |
 | **Banner** | Width, height, up / down, corner, text size, opacity, glow strength, second line and badge. |
@@ -203,6 +203,7 @@ Everything runs on your device. Islandify does **not** request the Internet perm
 | Accessibility service | Draws the island above the status bar and knows which app is open. It does not read your screen. |
 | Overlay (draw over apps) | Fallback when the accessibility service is off. |
 | Post notifications, foreground service | The small "Islandify is running" notification that keeps the island alive. |
+| Wake lock | Lights the screen up for a notification when the screen is off ("Wake screen for notifications", off by default). |
 | Bluetooth (connect) | Earbud names and battery. Optional. |
 | Answer phone calls | Answer / end calls from the island. Optional. |
 | Read calendar | Next event on the idle pill. Optional. |

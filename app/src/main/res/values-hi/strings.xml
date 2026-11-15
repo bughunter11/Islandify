@@ -190,6 +190,9 @@
     <string name="cust_amoled_island_sub">शुद्ध काली पिल और साफ़ सफ़ेद आउटलाइन, ताकि AMOLED वॉलपेपर और लॉक स्क्रीन पर भी पढ़ा जा सके</string>
     <string name="cust_lock_read">लॉक स्क्रीन पर पढ़ें</string>
     <string name="cust_lock_read_sub">फ़ोन लॉक होने पर भेजने वाले का नाम और संदेश दिखाएँ। गोपनीय नोटिफिकेशन छिपे ही रहेंगे</string>
+    <string name="cust_wake_screen">नोटिफिकेशन के लिए स्क्रीन जगाएँ</string>
+    <string name="cust_wake_screen_sub">स्क्रीन बंद होने पर नोटिफिकेशन आने पर लॉक स्क्रीन जग उठेगी — Android ऐप्स को Always-On Display पर कुछ दिखाने नहीं देता। नोटिफिकेशन एक्सेस ज़रूरी है; Xiaomi / Samsung पर बैकग्राउंड में पॉप-अप की भी अनुमति दें</string>
+    <string name="cust_wake_needs_a11y">आइलैंड लॉक स्क्रीन पर तभी दिख सकता है जब एक्सेसिबिलिटी सेवा चालू हो। एक्सेसिबिलिटी सेटिंग्स खोलने के लिए टैप करें</string>
     <string name="cust_swipe_skip">स्वाइप करके गाने बदलें</string>
     <string name="cust_swipe_skip_sub">अगले के लिए आइलैंड बाएँ, पिछले के लिए दाएँ स्वाइप करें</string>
     <string name="cust_app_accent">आइलैंड ऐप का एक्सेंट रंग इस्तेमाल करे</string>

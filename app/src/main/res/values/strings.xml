@@ -190,6 +190,9 @@
     <string name="cust_amoled_island_sub">Pure black pill with a visible white outline, so it stays readable on AMOLED wallpapers and on the lock screen</string>
     <string name="cust_lock_read">Read on the locked screen</string>
     <string name="cust_lock_read_sub">Show the real sender and message text while the phone is locked. Secret notifications stay hidden</string>
+    <string name="cust_wake_screen">Wake screen for notifications</string>
+    <string name="cust_wake_screen_sub">Lights up the lock screen when a notification arrives with the screen off — Android does not let apps draw on the Always-On Display itself. Needs notification access; on Xiaomi / Samsung also allow pop-ups in the background</string>
+    <string name="cust_wake_needs_a11y">The island can only appear over the lock screen while the accessibility service is on. Tap to open the accessibility settings</string>
     <string name="cust_swipe_skip">Swipe to skip tracks</string>
     <string name="cust_swipe_skip_sub">Swipe the island left for next, right for previous</string>
     <string name="cust_app_accent">Island uses app accent</string>

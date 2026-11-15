@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.media.session.MediaController
 import android.media.session.PlaybackState
 import android.os.SystemClock
+import android.os.PowerManager
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlinx.coroutines.*
@@ -30,6 +31,8 @@ sealed interface IslandMode {
         val text: String,
         val canReply: Boolean = false,      // notification has an inline-reply action
         val canMarkRead: Boolean = false,   // notification has a "Mark as read" action
+        // The last few lines of the chat, newest last (Expanded card grows to show them)
+        val messages: List<String> = emptyList(),
     ) : IslandMode
     data class Media(
         val title: String,
@@ -136,6 +139,16 @@ object IslandController {
     private var replyJob: Job? = null
     /** False between SCREEN_OFF and SCREEN_ON: a banner waits instead of expiring where nobody sees it. */
     private val screenOn = MutableStateFlow(true)
+
+    /**
+     * The real display state. The flow above is only fed by the overlay's receiver, so it can be
+     * stale (or never set) when the island window is hidden; this reads it from the system.
+     */
+    private fun displayOn(): Boolean {
+        val c = appCtx ?: return true
+        return runCatching { c.getSystemService(PowerManager::class.java)?.isInteractive }
+            .getOrNull() ?: true
+    }
 
     /** A banner (notification / charging / device...) that is on screen or waiting for its turn. */
     private data class Flash(
@@ -558,7 +571,9 @@ object IslandController {
         flashJob = scope.launch {
             // Nobody can see the island while the screen is off: wait for it instead of burning the
             // show time behind the lock screen. After SCREEN_OFF_HOLD_MS the banner is dropped.
-            if (!screenOn.value) {
+            val interactive = displayOn()
+            if (screenOn.value != interactive) screenOn.value = interactive
+            if (!interactive) {
                 val on = withTimeoutOrNull(SCREEN_OFF_HOLD_MS) { screenOn.first { it } }
                 if (on == null) {
                     if (gen == flashGen) {

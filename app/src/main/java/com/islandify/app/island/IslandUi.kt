@@ -59,9 +59,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.coerceIn
@@ -262,7 +265,16 @@ private fun IslandBody(
         IslandLevel.Banner -> bannerWidth(mode)
         else -> 368.dp
     }
-    val baseH = when (lvl) {
+    // Never wider than the screen (density is already scaled, so derive dp from it)
+    val screenPx = LocalContext.current.resources.displayMetrics.widthPixels
+    val maxW = (screenPx / LocalDensity.current.density).dp - 8.dp
+    val targetW = (baseW * (when (lvl) {
+        IslandLevel.Banner -> bs.w
+        IslandLevel.Compact -> widthScale * (if (isPopup) 1f else bs.w)
+        else -> widthScale * bs.cardW
+    })).coerceAtMost(maxW)
+
+    val baseH = (when (lvl) {
         IslandLevel.Compact -> 38.dp
         IslandLevel.Banner -> 48.dp
         IslandLevel.Expanded -> expandedHeight(mode)
@@ -272,16 +284,7 @@ private fun IslandBody(
             is IslandMode.Live -> 168.dp
             else -> expandedHeight(mode)
         }
-    }
-
-    // Never wider than the screen (density is already scaled, so derive dp from it)
-    val screenPx = LocalContext.current.resources.displayMetrics.widthPixels
-    val maxW = (screenPx / LocalDensity.current.density).dp - 8.dp
-    val targetW = (baseW * (when (lvl) {
-        IslandLevel.Banner -> bs.w
-        IslandLevel.Compact -> widthScale * (if (isPopup) 1f else bs.w)
-        else -> widthScale * bs.cardW
-    })).coerceAtMost(maxW)
+    }) + threadExtra(mode, lvl, targetW, actions.replying)
     // The small pill keeps a sane height; the height slider mainly shapes the cards
     // The mini player adds a row under the card
     val miniExtra = if (sec != null && (lvl == IslandLevel.Expanded || lvl == IslandLevel.Large)) 52.dp else 0.dp
@@ -460,6 +463,47 @@ private fun expandedHeight(mode: IslandMode): Dp = when (mode) {
     is IslandMode.LowBattery -> 132.dp
     is IslandMode.Toggle -> 108.dp
     is IslandMode.Live -> 132.dp
+}
+
+/**
+ * Extra height for a chat thread on the expanded notification card.
+ *
+ * The card normally reserves two text lines (about four on the Large card). Every message of the thread
+ * is measured with the real font, the available width and the user's font scale, and the card is
+ * made taller by however much the thread needs beyond those lines — so three short messages are
+ * all readable in full instead of being cut after the newest one.
+ */
+@Composable
+private fun threadExtra(mode: IslandMode, level: IslandLevel, cardW: Dp, replying: Boolean): Dp {
+    val m = mode as? IslandMode.Notification ?: return 0.dp
+    val msgs = m.messages.filter { it.isNotBlank() }.take(4)
+    if (msgs.size < 2 || replying) return 0.dp
+    if (level != IslandLevel.Expanded && level != IslandLevel.Large) return 0.dp
+
+    val large = level == IslandLevel.Large
+    val perMsg = if (large) 2 else 3
+    val actionable = m.canReply || m.canMarkRead
+    val avatar = if (actionable && !large) 40.dp else if (large) 52.dp else 46.dp
+    val textW = (cardW - 44.dp - avatar - 14.dp).coerceAtLeast(80.dp)
+
+    val measurer = rememberTextMeasurer()
+    val d = LocalDensity.current
+    return remember(msgs, textW, d, large, perMsg) {
+        val style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal)
+        val c = Constraints(maxWidth = with(d) { textW.roundToPx() })
+        fun h(t: String) = measurer.measure(
+            AnnotatedString(t), style, maxLines = perMsg,
+            softWrap = true, overflow = TextOverflow.Ellipsis, constraints = c
+        ).size.height
+        val line = measurer.measure(
+            AnnotatedString("Ag"), style, maxLines = 1, constraints = c
+        ).size.height
+        val gap = with(d) { 6.dp.toPx() }.roundToInt()
+        val have = line * if (large) 4 else 2
+        val need = msgs.sumOf { h(it) } + gap * (msgs.size - 1)
+        with(d) { (need - have).coerceAtLeast(0).toDp() }
+            .coerceAtMost(if (large) 150.dp else 120.dp)
+    }
 }
 
 private fun IslandMode.Media.accentColor(fallback: Color): Color = accent?.let { Color(it) } ?: fallback
@@ -767,10 +811,23 @@ private fun Expanded(m: IslandMode, level: IslandLevel, a: IslandActions, amoled
                             lines = if (large && !typing) 2 else 1
                         )
                         Spacer(Modifier.height(2.dp))
-                        Label(
-                            m.text, color = if (amoled) Color(0xFFEDEDF0) else Color(0xFFD1D1D6), size = 14,
-                            lines = if (typing) 1 else if (large) 6 else 2, weight = FontWeight.Normal
-                        )
+                        val bodyColor = if (amoled) Color(0xFFEDEDF0) else Color(0xFFD1D1D6)
+                        val thread = m.messages.filter { it.isNotBlank() }.take(4)
+                        if (thread.size > 1 && !typing) {
+                            // Whole chat: every line in full, the card grew for it (threadExtra)
+                            thread.forEachIndexed { i, msg ->
+                                if (i > 0) Spacer(Modifier.height(6.dp))
+                                Label(
+                                    msg, color = bodyColor, size = 14,
+                                    lines = if (large) 2 else 3, weight = FontWeight.Normal
+                                )
+                            }
+                        } else {
+                            Label(
+                                m.text, color = bodyColor, size = 14,
+                                lines = if (typing) 1 else if (large) 6 else 2, weight = FontWeight.Normal
+                            )
+                        }
                     }
                 }
                 if (actionable) {

@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lights the screen up for a notification that arrives while the display is off -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Android 8-11: Bluetooth connect event + device name need the old BLUETOOTH permission -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -37,6 +39,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Invisible: only asks the system to turn the display on when a notification arrives -->
+        <activity
+            android:name=".island.WakeActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service
             android:name=".island.IslandService"

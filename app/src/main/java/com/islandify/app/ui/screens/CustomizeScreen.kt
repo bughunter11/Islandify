@@ -63,6 +63,7 @@ fun CustomizeScreen() {
     val idlePill by IslandSettings.idlePill.collectAsState()
     val islandAmoled by IslandSettings.islandAmoled.collectAsState()
     val showOnLock by IslandSettings.showOnLock.collectAsState()
+    val wakeScreen by IslandSettings.wakeScreen.collectAsState()
     val dynamicOk = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     fun nudge(dx: Float, dy: Float) {
@@ -158,6 +159,7 @@ fun CustomizeScreen() {
 
         /* ---------- Island behavior ---------- */
         SectionCard(title = stringResource(R.string.cust_behavior), icon = Icons.Rounded.TouchApp) {
+            val ctx = LocalContext.current
             SettingSlider(
                 stringResource(R.string.cust_auto_collapse), Icons.Rounded.Timer,
                 if (collapse == 0) stringResource(R.string.common_off) else stringResource(R.string.cust_seconds, collapse),
@@ -184,6 +186,36 @@ fun CustomizeScreen() {
                 subtitle = stringResource(R.string.cust_lock_read_sub),
                 checked = showOnLock, onChange = { IslandSettings.showOnLock.value = it; IslandSettings.save() }
             )
+            ToggleRow(
+                icon = Icons.Rounded.LightMode, title = stringResource(R.string.cust_wake_screen),
+                subtitle = stringResource(R.string.cust_wake_screen_sub),
+                checked = wakeScreen, onChange = { on ->
+                    IslandSettings.wakeScreen.value = on
+                    IslandSettings.save()
+                    // The screen can only be lit while the island is allowed to run in the
+                    // background; Android otherwise delays the notification listener.
+                    if (on && !Perms.battery(ctx)) Perms.openBatterySettings(ctx)
+                }
+            )
+            val a11yOn = remember(wakeScreen) { Perms.accessibility(ctx) }
+            if (wakeScreen && !a11yOn) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { Perms.openAccessibilitySettings(ctx) }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.WarningAmber, null, Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        stringResource(R.string.cust_wake_needs_a11y),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
             ToggleRow(
                 icon = Icons.Rounded.Palette, title = stringResource(R.string.cust_app_accent),
                 subtitle = stringResource(R.string.cust_app_accent_sub),

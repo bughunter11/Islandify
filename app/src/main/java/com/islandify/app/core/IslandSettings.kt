@@ -148,6 +148,7 @@ object IslandSettings {
     val stickyNotif = MutableStateFlow(false)                    // notifications stay on the island until tapped / swiped away
     val islandAmoled = MutableStateFlow(false)                   // pure black island + visible outline (AMOLED wallpapers, lock screen)
     val showOnLock = MutableStateFlow(false)                     // show the real notification text while the phone is locked
+    val wakeScreen = MutableStateFlow(false)                     // light up the screen when a notification arrives with the screen off
     val swipeUp = MutableStateFlow(SwipeAction.Dismiss)
     val swipeDown = MutableStateFlow(SwipeAction.None)
     val swipeLeft = MutableStateFlow(SwipeAction.NextTrack)
@@ -207,6 +208,7 @@ object IslandSettings {
         stickyNotif.value = p.getBoolean("stickyNotif", false)
         islandAmoled.value = p.getBoolean("islandAmoled", false)
         showOnLock.value = p.getBoolean("showOnLock", false)
+        wakeScreen.value = p.getBoolean("wakeScreen", false)
         swipeUp.value = SwipeAction.from(p.getString("swipeUp", null), SwipeAction.Dismiss)
         swipeDown.value = SwipeAction.from(p.getString("swipeDown", null), SwipeAction.None)
         swipeLeft.value = SwipeAction.from(p.getString("swipeLeft", null), SwipeAction.NextTrack)
@@ -246,6 +248,7 @@ object IslandSettings {
             ?.putBoolean("stickyNotif", stickyNotif.value)
             ?.putBoolean("islandAmoled", islandAmoled.value)
             ?.putBoolean("showOnLock", showOnLock.value)
+            ?.putBoolean("wakeScreen", wakeScreen.value)
             ?.putString("swipeUp", swipeUp.value.key)
             ?.putString("swipeDown", swipeDown.value.key)
             ?.putString("swipeLeft", swipeLeft.value.key)
@@ -329,6 +332,7 @@ object IslandSettings {
         stickyNotif.value = false
         islandAmoled.value = false
         showOnLock.value = false
+        wakeScreen.value = false
         swipeUp.value = SwipeAction.Dismiss
         swipeDown.value = SwipeAction.None
         swipeLeft.value = SwipeAction.NextTrack

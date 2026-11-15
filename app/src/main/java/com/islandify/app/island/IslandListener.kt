@@ -48,6 +48,12 @@ class IslandListener : NotificationListenerService() {
     // key -> signature of the last notification shown (same notification re-posted = skip)
     private val shown = HashMap<String, Int>()
 
+    // Last messages of each chat (WhatsApp / Telegram only put the newest line in EXTRA_TEXT).
+    // Oldest first, newest last; the expanded card shows them and grows to fit.
+    private val chats = HashMap<String, ArrayDeque<String>>()
+    // notification key -> chat key, so a dismissed notification can drop its history
+    private val keyToChat = HashMap<String, String>()
+
     private val callback = object : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) = reselect()
         override fun onPlaybackStateChanged(state: PlaybackState?) = reselect()
@@ -243,6 +249,49 @@ class IslandListener : NotificationListenerService() {
         return ex.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString().orEmpty()
     }
 
+    /**
+     * The last few messages of this chat, oldest first, so the expanded card can show a whole
+     * conversation instead of one line.
+     *
+     * MessagingStyle already carries the conversation (Google Messages, Signal, ...). Apps like
+     * WhatsApp only put the newest message into EXTRA_TEXT, so for chat notifications we keep the
+     * last [MAX_THREAD] lines we saw ourselves. Everything else stays single-line.
+     */
+    @Suppress("DEPRECATION")
+    private fun threadOf(
+        sbn: StatusBarNotification,
+        title: String,
+        text: String,
+        chatLike: Boolean,
+    ): List<String> {
+        val n = sbn.notification
+        if (n.category != Notification.CATEGORY_MESSAGE && !chatLike &&
+            !n.extras.containsKey(Notification.EXTRA_MESSAGES)
+        ) return emptyList()
+
+        val styled = runCatching {
+            val arr = n.extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+                ?: return@runCatching emptyList<String>()
+            Notification.MessagingStyle.Message.getMessagesFromBundleArray(arr)
+                .mapNotNull { it.text?.toString()?.takeIf(String::isNotBlank) }
+        }.getOrDefault(emptyList())
+        if (styled.size > 1) return styled.takeLast(MAX_THREAD)
+
+        val chat = sbn.packageName + "|" + title
+        val hist = chats.getOrPut(chat) { ArrayDeque() }
+        if (text.isNotBlank() && hist.lastOrNull() != text) {
+            hist.addLast(text)
+            while (hist.size > MAX_THREAD) hist.removeFirst()
+        }
+        keyToChat[sbn.key] = chat
+        // History is only a nicety: forget everything if too many dead chats pile up
+        if (chats.size > 80) {
+            chats.clear()
+            chats[chat] = hist
+        }
+        return hist.toList()
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName == packageName) return
         val n = sbn.notification
@@ -320,6 +369,11 @@ class IslandListener : NotificationListenerService() {
                 t.contains("mark as read") || t == "mark read"
         }?.actionIntent
 
+        // Display off (screen off / AOD): light it up so the notification is readable on the lock
+        // screen. Silent channel notifications do not wake the screen, they only follow the rules
+        // above (shown when "Quiet" notifications are allowed).
+        if (!quiet && IslandSettings.wakeScreen.value) ScreenWaker.wake(this)
+
         IslandController.flash(
             IslandMode.Notification(
                 app,
@@ -327,6 +381,7 @@ class IslandListener : NotificationListenerService() {
                 if (hide) "New notification" else text,
                 canReply = reply != null,
                 canMarkRead = markRead != null,
+                messages = if (hide) emptyList() else threadOf(sbn, title, text, reply != null),
             ),
             // Cards with buttons stay a bit longer so there is time to tap them
             durationMs = when {
@@ -350,6 +405,9 @@ class IslandListener : NotificationListenerService() {
         IslandController.notificationRemoved(sbn.key)
         textTimers.remove(sbn.key)
         shown.remove(sbn.key)
+        keyToChat.remove(sbn.key)?.let { chat ->
+            if (keyToChat.values.none { it == chat }) chats.remove(chat)
+        }
     }
 
     /**
@@ -570,6 +628,7 @@ class IslandListener : NotificationListenerService() {
     }
 
     private companion object {
+        const val MAX_THREAD = 4
         val NON_LETTER = Regex("""\P{L}+""")
         val CALL_ACTION_WORDS = setOf("answer", "accept", "decline", "reject", "hang", "hangup", "end")
         // Only real Clock apps. A name check like contains("clock") also matched any unrelated app.
