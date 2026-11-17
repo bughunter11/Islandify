@@ -146,6 +146,10 @@ object IslandSettings {
     val idlePill = MutableStateFlow(true)                        // small pill stays on screen when idle (tap = time / date / battery)
     val swipeSkip = MutableStateFlow(true)                       // swipe left/right on the island to skip tracks
     val stickyNotif = MutableStateFlow(false)                    // notifications stay on the island until tapped / swiped away
+    val islandAmoled = MutableStateFlow(false)                   // pure black island + visible outline (AMOLED wallpapers, lock screen)
+    val showOnLock = MutableStateFlow(false)                     // show the real notification text while the phone is locked
+    val wakeScreen = MutableStateFlow(false)                     // light up the screen when a notification arrives with the screen off
+    val aod = MutableStateFlow(false)                            // Islandify's own always-on screen (black window at minimum brightness)
     val swipeUp = MutableStateFlow(SwipeAction.Dismiss)
     val swipeDown = MutableStateFlow(SwipeAction.None)
     val swipeLeft = MutableStateFlow(SwipeAction.NextTrack)
@@ -203,6 +207,10 @@ object IslandSettings {
         autoCollapseSec.value = p.getInt("autoCollapse", 6)
         swipeSkip.value = p.getBoolean("swipeSkip", true)
         stickyNotif.value = p.getBoolean("stickyNotif", false)
+        islandAmoled.value = p.getBoolean("islandAmoled", false)
+        showOnLock.value = p.getBoolean("showOnLock", false)
+        wakeScreen.value = p.getBoolean("wakeScreen", false)
+        aod.value = p.getBoolean("aod", false)
         swipeUp.value = SwipeAction.from(p.getString("swipeUp", null), SwipeAction.Dismiss)
         swipeDown.value = SwipeAction.from(p.getString("swipeDown", null), SwipeAction.None)
         swipeLeft.value = SwipeAction.from(p.getString("swipeLeft", null), SwipeAction.NextTrack)
@@ -240,6 +248,10 @@ object IslandSettings {
             ?.putInt("autoCollapse", autoCollapseSec.value)
             ?.putBoolean("swipeSkip", swipeSkip.value)
             ?.putBoolean("stickyNotif", stickyNotif.value)
+            ?.putBoolean("islandAmoled", islandAmoled.value)
+            ?.putBoolean("showOnLock", showOnLock.value)
+            ?.putBoolean("wakeScreen", wakeScreen.value)
+            ?.putBoolean("aod", aod.value)
             ?.putString("swipeUp", swipeUp.value.key)
             ?.putString("swipeDown", swipeDown.value.key)
             ?.putString("swipeLeft", swipeLeft.value.key)
@@ -321,6 +333,10 @@ object IslandSettings {
         autoCollapseSec.value = 6
         swipeSkip.value = true
         stickyNotif.value = false
+        islandAmoled.value = false
+        showOnLock.value = false
+        wakeScreen.value = false
+        aod.value = false
         swipeUp.value = SwipeAction.Dismiss
         swipeDown.value = SwipeAction.None
         swipeLeft.value = SwipeAction.NextTrack
