@@ -64,6 +64,7 @@ fun CustomizeScreen() {
     val islandAmoled by IslandSettings.islandAmoled.collectAsState()
     val showOnLock by IslandSettings.showOnLock.collectAsState()
     val wakeScreen by IslandSettings.wakeScreen.collectAsState()
+    val aod by IslandSettings.aod.collectAsState()
     val dynamicOk = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     fun nudge(dx: Float, dy: Float) {
@@ -211,6 +212,39 @@ fun CustomizeScreen() {
                     Spacer(Modifier.width(10.dp))
                     Text(
                         stringResource(R.string.cust_wake_needs_a11y),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            ToggleRow(
+                icon = Icons.Rounded.DarkMode, title = stringResource(R.string.cust_aod),
+                subtitle = stringResource(R.string.cust_aod_sub),
+                checked = aod, onChange = { on ->
+                    IslandSettings.aod.value = on
+                    IslandSettings.save()
+                    // AOD is driven by the accessibility service: it draws above the keyguard and
+                    // only it may start the black screen while the phone is idle.
+                    if (on) {
+                        if (!Perms.battery(ctx)) Perms.openBatterySettings(ctx)
+                        if (!Perms.accessibility(ctx)) Perms.openAccessibilitySettings(ctx)
+                    }
+                }
+            )
+            val aodA11y = remember(aod) { Perms.accessibility(ctx) }
+            if (aod && !aodA11y) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { Perms.openAccessibilitySettings(ctx) }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.WarningAmber, null, Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        stringResource(R.string.cust_aod_needs_a11y),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )

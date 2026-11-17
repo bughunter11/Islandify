@@ -37,6 +37,7 @@ class IslandA11yService : AccessibilityService() {
         overlay = o
         scope = s
         connected.value = true
+        AodController.attach(this)
 
         // The in-app switch (IslandSettings.enabled) shows / hides the island
         s.launch {
@@ -60,6 +61,7 @@ class IslandA11yService : AccessibilityService() {
 
     private fun teardown() {
         connected.value = false
+        AodController.detach()
         scope?.cancel()
         scope = null
         overlay?.hide()

@@ -193,6 +193,11 @@
     <string name="cust_wake_screen">Wake screen for notifications</string>
     <string name="cust_wake_screen_sub">Lights up the lock screen when a notification arrives with the screen off — Android does not let apps draw on the Always-On Display itself. Needs notification access; on Xiaomi / Samsung also allow pop-ups in the background</string>
     <string name="cust_wake_needs_a11y">The island can only appear over the lock screen while the accessibility service is on. Tap to open the accessibility settings</string>
+    <string name="cust_aod">Always-On display (AOD)</string>
+    <string name="cust_aod_sub">A dim clock and the notifications that are waiting, while the phone is idle. Android does not let apps draw on the system AOD, so Islandify keeps its own black screen on at the lowest brightness — the panel stays awake, so expect extra battery use. Needs the accessibility service; the AOD also turns off in a pocket and on very low battery</string>
+    <string name="cust_aod_needs_a11y">AOD needs the Islandify accessibility service. Tap to turn it on</string>
+    <string name="aod_unlock">Tap to unlock</string>
+    <string name="aod_new_notification">%1$s: new notification</string>
     <string name="cust_swipe_skip">Swipe to skip tracks</string>
     <string name="cust_swipe_skip_sub">Swipe the island left for next, right for previous</string>
     <string name="cust_app_accent">Island uses app accent</string>

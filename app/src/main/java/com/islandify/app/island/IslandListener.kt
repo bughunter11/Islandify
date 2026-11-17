@@ -374,6 +374,11 @@ class IslandListener : NotificationListenerService() {
         // above (shown when "Quiet" notifications are allowed).
         if (!quiet && IslandSettings.wakeScreen.value) ScreenWaker.wake(this)
 
+        // The Always-On screen keeps showing what is waiting until the phone is unlocked
+        if (n.visibility != Notification.VISIBILITY_SECRET) {
+            AodNotes.put(AodNote(sbn.key, app, title, text))
+        }
+
         IslandController.flash(
             IslandMode.Notification(
                 app,
@@ -405,6 +410,7 @@ class IslandListener : NotificationListenerService() {
         IslandController.notificationRemoved(sbn.key)
         textTimers.remove(sbn.key)
         shown.remove(sbn.key)
+        AodNotes.remove(sbn.key)
         keyToChat.remove(sbn.key)?.let { chat ->
             if (keyToChat.values.none { it == chat }) chats.remove(chat)
         }
